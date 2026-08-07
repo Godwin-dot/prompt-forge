@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import RevealText from "@/components/RevealText";
 
 type Props = {
   title: string;
   content: string;
   onCopy?: (text: string) => Promise<void> | void;
+  reveal?: boolean;
+  revealed?: boolean;
+  onRevealed?: () => void;
 };
 
 function ClipboardIcon({ className }: { className?: string }) {
@@ -26,7 +30,14 @@ function CheckIcon({ className }: { className?: string }) {
 }
 
 // Bloc "terminal" signature : toujours sombre, quel que soit le thème global.
-export default function TerminalBlock({ title, content, onCopy }: Props) {
+export default function TerminalBlock({
+  title,
+  content,
+  onCopy,
+  reveal = false,
+  revealed = false,
+  onRevealed,
+}: Props) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -34,6 +45,14 @@ export default function TerminalBlock({ title, content, onCopy }: Props) {
     const timer = setTimeout(() => setCopied(false), 1500);
     return () => clearTimeout(timer);
   }, [copied]);
+
+  // À la fin de l'effet de révélation, on bascule sur le texte complet.
+  useEffect(() => {
+    if (!reveal) return;
+    const words = content.split(" ");
+    const timer = setTimeout(() => onRevealed?.(), words.length * 12 + 50);
+    return () => clearTimeout(timer);
+  }, [reveal, content, onRevealed]);
 
   const copy = async () => {
     if (onCopy) {
@@ -89,7 +108,7 @@ export default function TerminalBlock({ title, content, onCopy }: Props) {
 
       {/* Corps */}
       <pre className="scrollbar-thin max-h-[50vh] overflow-auto whitespace-pre-wrap p-5 font-mono text-[13px] leading-relaxed text-[var(--terminal-text)] sm:p-6">
-        {content}
+        {reveal && !revealed ? <RevealText text={content} /> : content}
       </pre>
     </div>
   );

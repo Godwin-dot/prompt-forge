@@ -4,7 +4,18 @@ export type AIResult =
   | { type: "questions"; questions: string[] }
   | { type: "final"; prompt: string };
 
-export function buildSystemPrompt(): AIMessage {
+export type PromptStyle = "concise" | "balanced" | "detailed";
+
+export function buildSystemPrompt(style: PromptStyle = "balanced"): AIMessage {
+  const styleInstruction: Record<PromptStyle, string> = {
+    concise:
+      "STYLE CONCIS : le prompt final doit être bref et direct, sans phrases inutiles, tout en restant exploitable.",
+    balanced:
+      "STYLE ÉQUILIBRÉ : le prompt final doit être clair et complet, sans être verbeux.",
+    detailed:
+      "STYLE DÉTAILLÉ : le prompt final doit être exhaustif : rôle, contexte, contraintes, exemples attendus et critères de qualité.",
+  };
+
   const system = `
 Tu es un assistant qui optimise les prompts utilisateur pour de l'IA générative.
 
@@ -20,6 +31,8 @@ Tu es un assistant qui optimise les prompts utilisateur pour de l'IA générativ
      {"type":"questions","questions":["...","..."]}
    - Pour le prompt final : strictement, sans rien d'autre, ce JSON :
      {"type":"final","prompt":"..."}
+
+${styleInstruction[style]}
 
 CONTRAINTES STRICTES :
 - Réponds UNIQUEMENT avec un objet JSON valide. Aucun texte avant/après, aucun markdown.

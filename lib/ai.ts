@@ -59,7 +59,8 @@ function getAvailableProviders(): AIProvider[] {
 async function callProvider(
   provider: AIProvider,
   messages: AIMessage[],
-  remainingMs: number
+  remainingMs: number,
+  temperature = 0.7
 ): Promise<string | null> {
   const timeoutMs = Math.min(REQUEST_TIMEOUT_MS, remainingMs);
   const controller = new AbortController();
@@ -78,7 +79,7 @@ async function callProvider(
       body: JSON.stringify({
         model: provider.model,
         messages,
-        temperature: 0.7,
+        temperature,
       }),
       signal: controller.signal,
     });
@@ -115,7 +116,10 @@ async function callProvider(
 // Un budget global borne la durée totale, quel que soit le nombre de providers tentés :
 // chaque appel reçoit au plus le temps restant (et au plus REQUEST_TIMEOUT_MS).
 // Si tous échouent (ou si le budget expire), lève une erreur claire.
-export async function callAI(messages: AIMessage[]): Promise<AIResponse> {
+export async function callAI(
+  messages: AIMessage[],
+  options?: { temperature?: number }
+): Promise<AIResponse> {
   const providers = getAvailableProviders();
 
   if (providers.length === 0) {
@@ -132,7 +136,12 @@ export async function callAI(messages: AIMessage[]): Promise<AIResponse> {
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
 
-    const content = await callProvider(provider, messages, remaining);
+    const content = await callProvider(
+      provider,
+      messages,
+      remaining,
+      options?.temperature
+    );
     if (content !== null) {
       return { provider: provider.name, model: provider.model, content };
     }

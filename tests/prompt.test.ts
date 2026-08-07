@@ -3,6 +3,7 @@ import {
   parseAIResult,
   buildLocalFinalPrompt,
   buildUserMessage,
+  buildSystemPrompt,
   FORCE_FINAL_PROMPT,
 } from "@/lib/prompt";
 
@@ -77,5 +78,17 @@ describe("FORCE_FINAL_PROMPT", () => {
   it("exige le prompt final", () => {
     expect(FORCE_FINAL_PROMPT).toContain("Ne pose plus de questions");
     expect(FORCE_FINAL_PROMPT).toContain("final");
+  });
+});
+
+describe("buildSystemPrompt", () => {
+  it("inclut le style par défaut équilibré", () => {
+    const sys = buildSystemPrompt();
+    expect(sys.content).toContain("STYLE ÉQUILIBRÉ");
+  });
+
+  it("respecte le style demandé", () => {
+    expect(buildSystemPrompt("concise").content).toContain("STYLE CONCIS");
+    expect(buildSystemPrompt("detailed").content).toContain("STYLE DÉTAILLÉ");
   });
 });

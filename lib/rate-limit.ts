@@ -58,3 +58,26 @@ export async function checkRateLimit(
 export const RATE_LIMIT_ENDPOINTS = {
   GENERATE: "/api/generate",
 } as const;
+
+// Retourne le quota restant pour un utilisateur+endpoint sans consommer
+// d'appel (compte les enregistrements sur la fenêtre courante).
+export async function getRemainingQuota(
+  userId: string,
+  endpoint: string
+): Promise<{ remaining: number; max: number }> {
+  const max = Number(process.env.RATE_LIMIT_MAX ?? DEFAULT_MAX);
+  const windowMs = Number(
+    process.env.RATE_LIMIT_WINDOW_MS ?? DEFAULT_WINDOW_MS
+  );
+  const cutoff = new Date(Date.now() - windowMs);
+
+  const count = await prisma.apiUsage.count({
+    where: {
+      userId,
+      endpoint,
+      createdAt: { gte: cutoff },
+    },
+  });
+
+  return { remaining: Math.max(0, max - count), max };
+}

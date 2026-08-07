@@ -8,6 +8,12 @@ votre outil d'IA préféré. Multi-fournisseurs avec fallback automatique.
 - Parcours en 3 étapes : idée → précisions → prompt final.
 - Fallback automatique entre 4 fournisseurs (Groq, OpenRouter, Google AI, OpenAI).
 - Comptes utilisateurs : historique privé, copie et suppression.
+- Suggestions de démarrage, recherche/filtres dans l'historique.
+- Marquer un prompt comme « utilisé », « régénérer », partager un lien public.
+- Réglages de création : température (créativité) et style (concis/équilibré/détaillé).
+- Option « ne pas conserver » et brouillon autosauvegardé.
+- Affichage du fournisseur, du modèle, du temps de génération et du quota restant.
+- Ouverture directe dans ChatGPT / Claude / Gemini.
 - Thème clair/sombre, responsive.
 - Rate limiting et validation des entrées côté API.
 

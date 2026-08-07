@@ -36,6 +36,10 @@ model GeneratedPrompt {
   clarifyingAnswers   String?
   finalPrompt         String
   createdAt           DateTime @default(now())
+  used                Boolean  @default(false)
+  provider            String?
+  model               String?
+  shareToken          String?  @unique
   userId              String
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { callAI, type AIMessage } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import { checkRateLimit, RATE_LIMIT_ENDPOINTS } from "@/lib/rate-limit";
+import {
+  checkRateLimit,
+  getRemainingQuota,
+  RATE_LIMIT_ENDPOINTS,
+} from "@/lib/rate-limit";
 import {
   buildSystemPrompt,
   buildUserMessage,
@@ -11,6 +15,7 @@ import {
   buildLocalFinalPrompt,
   FORCE_FINAL_PROMPT,
   type AIResult,
+  type PromptStyle,
 } from "@/lib/prompt";
 
 export const runtime = "nodejs";
@@ -20,31 +25,47 @@ const MAX_USER_INPUT = 2000;
 const MAX_QUESTIONS = 8;
 const MAX_ITEM_LENGTH = 200;
 
+const STYLES: PromptStyle[] = ["concise", "balanced", "detailed"];
+
 type GenerateRequest = {
   userInput: string;
   previousQuestions?: string[];
   previousAnswers?: string[];
+  temperature?: number;
+  style?: PromptStyle;
+  save?: boolean;
 };
 
 class ForceFinalError extends Error {}
 
 async function requestAI(
   messages: AIMessage[],
-  forceFinal = false
-): Promise<{ result: AIResult; usedProvider: string }> {
-  const response = await callAI(messages);
+  forceFinal = false,
+  temperature?: number
+): Promise<{ result: AIResult; usedProvider: string; usedModel: string }> {
+  const call = (msgs: AIMessage[]) => callAI(msgs, { temperature });
+
+  const response = await call(messages);
 
   const parsed = parseAIResult(response.content);
   if (parsed && parsed.type === "final") {
-    return { result: parsed, usedProvider: response.provider };
+    return {
+      result: parsed,
+      usedProvider: response.provider,
+      usedModel: response.model,
+    };
   }
   if (parsed && parsed.type === "questions" && !forceFinal) {
-    return { result: parsed, usedProvider: response.provider };
+    return {
+      result: parsed,
+      usedProvider: response.provider,
+      usedModel: response.model,
+    };
   }
 
   // JSON invalide/inattendu, OU questions alors qu'on exige le prompt final :
   // relance une fois en forçant le format / le résultat attendu.
-  const retry = await callAI([
+  const retry = await call([
     ...messages,
     {
       role: "user",
@@ -59,10 +80,18 @@ async function requestAI(
 
   const retryParsed = parseAIResult(retry.content);
   if (retryParsed && retryParsed.type === "final") {
-    return { result: retryParsed, usedProvider: retry.provider };
+    return {
+      result: retryParsed,
+      usedProvider: retry.provider,
+      usedModel: retry.model,
+    };
   }
   if (retryParsed && retryParsed.type === "questions" && !forceFinal) {
-    return { result: retryParsed, usedProvider: retry.provider };
+    return {
+      result: retryParsed,
+      usedProvider: retry.provider,
+      usedModel: retry.model,
+    };
   }
 
   if (forceFinal) {
@@ -145,39 +174,84 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Paramètres optionnels (température, style, conservation).
+  let temperature = 0.7;
+  if (typeof body.temperature === "number") {
+    if (Number.isFinite(body.temperature) && body.temperature >= 0 && body.temperature <= 2) {
+      temperature = body.temperature;
+    } else {
+      return NextResponse.json(
+        { error: "La température doit être comprise entre 0 et 2." },
+        { status: 400 }
+      );
+    }
+  }
+
+  const style: PromptStyle =
+    body.style && STYLES.includes(body.style) ? body.style : "balanced";
+
+  const save = body.save !== false;
+
+  const startedAt = Date.now();
+
   const messages: AIMessage[] = [
-    buildSystemPrompt(),
+    buildSystemPrompt(style),
     buildUserMessage(userInput, body.previousQuestions, body.previousAnswers),
   ];
 
   // Dès que l'utilisateur a répondu aux questions, on exige le prompt final.
   const forceFinal = Boolean(body.previousAnswers?.length);
 
-  const persistFinal = async (finalPrompt: string, provider: string) => {
-    await prisma.generatedPrompt.create({
-      data: {
-        userInput,
-        clarifyingQuestions: body.previousQuestions?.length
-          ? JSON.stringify(body.previousQuestions)
-          : null,
-        clarifyingAnswers: body.previousAnswers?.length
-          ? JSON.stringify(body.previousAnswers)
-          : null,
-        finalPrompt,
-        userId,
-      },
+  const persistFinal = async (finalPrompt: string, provider: string, model?: string) => {
+    const durationMs = Date.now() - startedAt;
+    if (save) {
+      await prisma.generatedPrompt.create({
+        data: {
+          userInput,
+          clarifyingQuestions: body.previousQuestions?.length
+            ? JSON.stringify(body.previousQuestions)
+            : null,
+          clarifyingAnswers: body.previousAnswers?.length
+            ? JSON.stringify(body.previousAnswers)
+            : null,
+          finalPrompt,
+          provider,
+          model: model ?? null,
+          userId,
+        },
+      });
+    }
+    const quota = await getRemainingQuota(userId, RATE_LIMIT_ENDPOINTS.GENERATE);
+    return NextResponse.json({
+      type: "final",
+      prompt: finalPrompt,
+      provider,
+      model: model ?? null,
+      durationMs,
+      saved: save,
+      remaining: quota.remaining,
     });
-    return NextResponse.json({ type: "final", prompt: finalPrompt, provider });
   };
 
   try {
-    const { result, usedProvider } = await requestAI(messages, forceFinal);
+    const { result, usedProvider, usedModel } = await requestAI(
+      messages,
+      forceFinal,
+      temperature
+    );
 
     if (result.type === "final") {
-      return await persistFinal(result.prompt, usedProvider);
+      return await persistFinal(result.prompt, usedProvider, usedModel);
     }
 
-    return NextResponse.json({ ...result, provider: usedProvider });
+    const quota = await getRemainingQuota(userId, RATE_LIMIT_ENDPOINTS.GENERATE);
+    return NextResponse.json({
+      ...result,
+      provider: usedProvider,
+      model: usedModel,
+      durationMs: Date.now() - startedAt,
+      remaining: quota.remaining,
+    });
   } catch (error) {
     // Dernière sécurité : si l'IA persiste à renvoyer des questions (ou du JSON
     // invalide) après les réponses, on génère un prompt final localement.

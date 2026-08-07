@@ -20,6 +20,12 @@ export default function AuthStatus() {
         <span className="hidden max-w-[160px] truncate text-xs text-[var(--color-text-muted)] sm:block">
           {session.user.email}
         </span>
+        <Link
+          href="/account"
+          className="hidden rounded-lg px-3 py-1.5 text-[13px] font-medium text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] sm:block"
+        >
+          Compte
+        </Link>
         <button
           type="button"
           disabled={loadingSignOut}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { randomBytes } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export async function GET() {
     const prompts = await prisma.generatedPrompt.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 100,
     });
     return NextResponse.json({ prompts });
   } catch (error) {
@@ -58,6 +59,67 @@ export async function DELETE(req: Request) {
     console.error("[api/history] DELETE error:", error);
     return NextResponse.json(
       { error: "Impossible de supprimer." },
+      { status: 500 }
+    );
+  }
+}
+
+// Marque un prompt comme "utilisé" (ou non) / génère un token de partage.
+export async function PATCH(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non connecté." }, { status: 401 });
+  }
+  const userId = session.user.id;
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    const action = searchParams.get("action");
+
+    if (!id) {
+      return NextResponse.json({ error: "ID manquant." }, { status: 400 });
+    }
+
+    const existing = await prisma.generatedPrompt.findFirst({
+      where: { id, userId },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Introuvable." }, { status: 404 });
+    }
+
+    if (action === "toggleUsed") {
+      const updated = await prisma.generatedPrompt.update({
+        where: { id },
+        data: { used: !existing.used },
+      });
+      return NextResponse.json({ used: updated.used });
+    }
+
+    if (action === "share") {
+      const token = existing.shareToken ?? randomBytes(12).toString("hex");
+      if (!existing.shareToken) {
+        await prisma.generatedPrompt.update({
+          where: { id },
+          data: { shareToken: token },
+        });
+      }
+      return NextResponse.json({ shareToken: token });
+    }
+
+    if (action === "unshare") {
+      await prisma.generatedPrompt.update({
+        where: { id },
+        data: { shareToken: null },
+      });
+      return NextResponse.json({ shareToken: null });
+    }
+
+    return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
+  } catch (error) {
+    console.error("[api/history] PATCH error:", error);
+    return NextResponse.json(
+      { error: "Impossible de mettre à jour." },
       { status: 500 }
     );
   }
