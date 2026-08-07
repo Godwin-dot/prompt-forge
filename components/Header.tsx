@@ -1,6 +1,7 @@
 "use client";
 
 import ThemeToggle from "@/components/ThemeToggle";
+import AuthStatus from "@/components/AuthStatus";
 
 export default function Header() {
   return (
@@ -13,7 +14,10 @@ export default function Header() {
         >
           Prompt<span className="text-[var(--color-accent)]">Forge</span>
         </a>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <AuthStatus />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

@@ -61,11 +61,12 @@ export default function HistorySection({ refreshKey = 0 }: { refreshKey?: number
   const fetchHistory = () => {
     fetch("/api/history")
       .then((res) => {
+        if (res.status === 401) throw new Error("auth");
         if (!res.ok) throw new Error("Chargement impossible");
         return res.json();
       })
       .then((data) => setItems(Array.isArray(data.prompts) ? data.prompts : []))
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(err.message === "auth" ? "auth" : "load"))
       .finally(() => setLoading(false));
   };
 
@@ -104,7 +105,13 @@ export default function HistorySection({ refreshKey = 0 }: { refreshKey?: number
         </p>
       )}
 
-      {error && (
+      {error === "auth" && (
+        <p className="py-4 text-sm text-[var(--color-text-muted)]">
+          Connecte-toi pour retrouver ton historique.
+        </p>
+      )}
+
+      {error === "load" && (
         <p className="error-banner mt-3" role="alert">
           Impossible de charger l&apos;historique
         </p>

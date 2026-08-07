@@ -8,7 +8,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Exemple de modèle minimal : à enrichir selon le domaine (prompts, tests, runs...).
+model User {
+  id           String             @id @default(cuid())
+  email        String             @unique
+  passwordHash String
+  createdAt    DateTime           @default(now())
+  prompts      GeneratedPrompt[]
+
+  @@index([email])
+}
+
 model Prompt {
   id        String   @id @default(cuid())
   title     String
@@ -24,4 +33,6 @@ model GeneratedPrompt {
   clarifyingAnswers   String?
   finalPrompt         String
   createdAt           DateTime @default(now())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

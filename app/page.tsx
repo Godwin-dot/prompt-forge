@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import InputStep from "@/components/InputStep";
 import QuestionsStep from "@/components/QuestionsStep";
 import ResultStep from "@/components/ResultStep";
@@ -34,6 +35,7 @@ const SCREEN_SUBTITLE: Record<Step, string> = {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("input");
   const [userInput, setUserInput] = useState("");
   const [questions, setQuestions] = useState<string[]>([]);
@@ -68,6 +70,10 @@ export default function Home() {
 
       const data = (await res.json()) as AIResult & { error?: string };
 
+      if (res.status === 401) {
+        router.push("/login");
+        return;
+      }
       if (!res.ok) {
         throw new Error(data.error || "Une erreur est survenue");
       }

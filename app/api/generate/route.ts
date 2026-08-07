@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import { callAI, type AIMessage } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -157,6 +159,12 @@ async function requestAI(
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non connecté." }, { status: 401 });
+  }
+  const userId = session.user.id;
+
   let body: GenerateRequest;
   try {
     body = (await req.json()) as GenerateRequest;
@@ -191,6 +199,7 @@ export async function POST(req: NextRequest) {
           ? JSON.stringify(body.previousAnswers)
           : null,
         finalPrompt,
+        userId,
       },
     });
     return NextResponse.json({ type: "final", prompt: finalPrompt, provider });
