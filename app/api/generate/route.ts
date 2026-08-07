@@ -3,9 +3,22 @@ import { getServerSession } from "next-auth";
 import { callAI, type AIMessage } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { checkRateLimit, RATE_LIMIT_ENDPOINTS } from "@/lib/rate-limit";
+import {
+  buildSystemPrompt,
+  buildUserMessage,
+  parseAIResult,
+  buildLocalFinalPrompt,
+  FORCE_FINAL_PROMPT,
+  type AIResult,
+} from "@/lib/prompt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const MAX_USER_INPUT = 2000;
+const MAX_QUESTIONS = 8;
+const MAX_ITEM_LENGTH = 200;
 
 type GenerateRequest = {
   userInput: string;
@@ -13,105 +26,7 @@ type GenerateRequest = {
   previousAnswers?: string[];
 };
 
-type ClarifyResponse = { type: "questions"; questions: string[] };
-type FinalResponse = { type: "final"; prompt: string };
-type AIResult = ClarifyResponse | FinalResponse;
-
-function buildSystemPrompt(): AIMessage {
-  const system = `
-Tu es un assistant qui optimise les prompts utilisateur pour de l'IA générative.
-
-À partir de la phrase de l'utilisateur (et des réponses aux questions de clarification si elles existent), tu dois :
-
-1. ANALYSER si tu disposes d'assez de contexte pour écrire un prompt final excellent.
-   - Si le contexte contient déjà des réponses aux questions de clarification (les "R" de la section contexte) : NE pose JAMAIS de nouvelles questions. Produis le prompt final directement.
-   - Sinon, si trop d'ambiguïtés ou d'infos manquantes jugées importantes subsistent : générer 2 à 4 questions de clarification ciblées, courtes et précises.
-   - Sinon : produire le prompt final optimisé, détaillé, avec instructions claires et rôle explicite.
-
-2. SORTIE :
-   - Pour des questions : strictement, sans rien d'autre, ce JSON :
-     {"type":"questions","questions":["...","..."]}
-   - Pour le prompt final : strictement, sans rien d'autre, ce JSON :
-     {"type":"final","prompt":"..."}
-
-CONTRAINTES STRICTES :
-- Réponds UNIQUEMENT avec un objet JSON valide. Aucun texte avant/après, aucun markdown.
-- Le JSON doit être parfaitement parsable (guillemets échappés correctement).
-`.trim();
-
-  return { role: "system", content: system };
-}
-
-function buildUserMessage(
-  userInput: string,
-  previousQuestions?: string[],
-  previousAnswers?: string[]
-): AIMessage {
-  let content = `Idée initiale de l'utilisateur :\n${userInput}`;
-
-  if (previousQuestions?.length || previousAnswers?.length) {
-    content += "\n\nContexte des questions précédentes :";
-    previousQuestions?.forEach((q, i) => {
-      content += `\nQ${i + 1}: ${q}`;
-      if (previousAnswers?.[i]) {
-        content += `\nR${i + 1}: ${previousAnswers[i]}`;
-      }
-    });
-  }
-
-  return { role: "user", content };
-}
-
-function parseAIResult(raw: string, userInput: string): AIResult | null {
-  try {
-    const parsed = JSON.parse(raw) as AIResult;
-
-    if (parsed.type === "questions" && Array.isArray(parsed.questions)) {
-      return { type: "questions", questions: parsed.questions };
-    }
-
-    if (parsed.type === "final" && typeof parsed.prompt === "string") {
-      return { type: "final", prompt: parsed.prompt };
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 class ForceFinalError extends Error {}
-
-// Fallback local : garantit qu'on renvoie toujours un prompt final exploitable
-// même si l'IA persiste à renvoyer des questions après les réponses.
-function buildLocalFinalPrompt(
-  userInput: string,
-  questions: string[] = [],
-  answers: string[] = []
-): string {
-  let prompt = `Tu es un expert en rédaction de prompts et en IA générative.\n\n`;
-  prompt += `Tâche :\n${userInput}\n`;
-
-  const details = questions
-    .map((q, i) => {
-      const answer = answers[i]?.trim();
-      return answer ? `- ${q} : ${answer}` : `- ${q}`;
-    })
-    .join("\n");
-
-  if (details) {
-    prompt += `\nExigences et précisions :\n${details}`;
-  }
-
-  prompt += `\n\nProduis une réponse complète, structurée et de haute qualité, avec des instructions claires et un rôle explicite.`;
-  return prompt;
-}
-
-const FORCE_FINAL_PROMPT =
-  "L'utilisateur a déjà répondu aux questions de clarification. " +
-  "Ne pose plus de questions : écris maintenant le prompt final optimisé. " +
-  'Réponds UNIQUEMENT avec un objet JSON : {"type":"final","prompt":"..."}. ' +
-  "Aucun autre texte.";
 
 async function requestAI(
   messages: AIMessage[],
@@ -119,7 +34,7 @@ async function requestAI(
 ): Promise<{ result: AIResult; usedProvider: string }> {
   const response = await callAI(messages);
 
-  const parsed = parseAIResult(response.content, "");
+  const parsed = parseAIResult(response.content);
   if (parsed && parsed.type === "final") {
     return { result: parsed, usedProvider: response.provider };
   }
@@ -142,7 +57,7 @@ async function requestAI(
     },
   ]);
 
-  const retryParsed = parseAIResult(retry.content, "");
+  const retryParsed = parseAIResult(retry.content);
   if (retryParsed && retryParsed.type === "final") {
     return { result: retryParsed, usedProvider: retry.provider };
   }
@@ -165,6 +80,19 @@ export async function POST(req: NextRequest) {
   }
   const userId = session.user.id;
 
+  const { allowed, retryAfterSeconds } = await checkRateLimit(
+    userId,
+    RATE_LIMIT_ENDPOINTS.GENERATE
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        error: `Quota de génération dépassé. Réessaie dans ${retryAfterSeconds} s.`,
+      },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+    );
+  }
+
   let body: GenerateRequest;
   try {
     body = (await req.json()) as GenerateRequest;
@@ -172,10 +100,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Corps JSON invalide." }, { status: 400 });
   }
 
-  const userInput = body.userInput?.trim();
+  const userInput = typeof body.userInput === "string" ? body.userInput.trim() : "";
   if (!userInput) {
     return NextResponse.json(
       { error: "Le champ 'userInput' est requis." },
+      { status: 400 }
+    );
+  }
+  if (userInput.length > MAX_USER_INPUT) {
+    return NextResponse.json(
+      {
+        error: `Ta demande est trop longue (${userInput.length} caractères, max ${MAX_USER_INPUT}).`,
+      },
+      { status: 400 }
+    );
+  }
+
+  const validateList = (
+    label: string,
+    value: unknown
+  ): string[] | null => {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) return null;
+    if (value.length > MAX_QUESTIONS) return null;
+    for (const item of value) {
+      if (typeof item !== "string" || item.length > MAX_ITEM_LENGTH) return null;
+    }
+    return value as string[];
+  };
+
+  const previousQuestions = validateList("previousQuestions", body.previousQuestions);
+  const previousAnswers = validateList("previousAnswers", body.previousAnswers);
+
+  if (previousQuestions === null || previousAnswers === null) {
+    return NextResponse.json(
+      { error: "Format des questions/réponses invalide (tableau de chaînes limités)." },
+      { status: 400 }
+    );
+  }
+  if (previousAnswers.length > previousQuestions.length) {
+    return NextResponse.json(
+      { error: "Il y a plus de réponses que de questions." },
       { status: 400 }
     );
   }

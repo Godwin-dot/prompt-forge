@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import Providers from "./Providers";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import PrivacyConsent from "@/components/PrivacyConsent";
 
 export const metadata: Metadata = {
   title: "Prompt Forge — Créateur de prompts IA",
@@ -48,6 +49,7 @@ export default function RootLayout({
             </div>
           </Providers>
         </ThemeProvider>
+        <PrivacyConsent />
       </body>
     </html>
   );

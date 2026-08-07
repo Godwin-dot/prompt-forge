@@ -35,7 +35,23 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.create({ data: { email, passwordHash } });
+  try {
+    await prisma.user.create({ data: { email, passwordHash } });
+  } catch (error) {
+    // Course à l'inscription : l'email a été créé entre le check et le create.
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "Un compte existe déjà avec cet email. Connecte-toi plutôt." },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 
   return NextResponse.json({ ok: true });
 }

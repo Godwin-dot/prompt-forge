@@ -9,21 +9,24 @@ datasource db {
 }
 
 model User {
-  id           String             @id @default(cuid())
-  email        String             @unique
+  id           String           @id @default(cuid())
+  email        String           @unique
   passwordHash String
-  createdAt    DateTime           @default(now())
+  createdAt    DateTime         @default(now())
   prompts      GeneratedPrompt[]
+  usage        ApiUsage[]
 
   @@index([email])
 }
 
-model Prompt {
+model ApiUsage {
   id        String   @id @default(cuid())
-  title     String
-  content   String
+  userId    String
+  endpoint  String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, endpoint, createdAt])
 }
 
 model GeneratedPrompt {
@@ -35,4 +38,6 @@ model GeneratedPrompt {
   createdAt           DateTime @default(now())
   userId              String
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

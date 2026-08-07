@@ -16,7 +16,8 @@ export type AIResponse = {
   content: string;
 };
 
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 15_000;
+const TOTAL_TIMEOUT_MS = 30_000;
 
 // Ordre = priorité (Groq d'abord pour la vitesse, OpenAI gratuit en dernier recours).
 // baseUrl est l'endpoint /chat/completions complet, compatible OpenAI.
@@ -57,10 +58,12 @@ function getAvailableProviders(): AIProvider[] {
 
 async function callProvider(
   provider: AIProvider,
-  messages: AIMessage[]
+  messages: AIMessage[],
+  remainingMs: number
 ): Promise<string | null> {
+  const timeoutMs = Math.min(REQUEST_TIMEOUT_MS, remainingMs);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(provider.baseUrl, {
@@ -109,7 +112,9 @@ async function callProvider(
 }
 
 // Parcourt les providers dans l'ordre de priorité et retourne la première réponse valide.
-// Si tous échouent, lève une erreur claire.
+// Un budget global borne la durée totale, quel que soit le nombre de providers tentés :
+// chaque appel reçoit au plus le temps restant (et au plus REQUEST_TIMEOUT_MS).
+// Si tous échouent (ou si le budget expire), lève une erreur claire.
 export async function callAI(messages: AIMessage[]): Promise<AIResponse> {
   const providers = getAvailableProviders();
 
@@ -120,10 +125,14 @@ export async function callAI(messages: AIMessage[]): Promise<AIResponse> {
     );
   }
 
+  const deadline = Date.now() + TOTAL_TIMEOUT_MS;
   let lastError: string = "inconnue";
 
   for (const provider of providers) {
-    const content = await callProvider(provider, messages);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+
+    const content = await callProvider(provider, messages, remaining);
     if (content !== null) {
       return { provider: provider.name, model: provider.model, content };
     }
@@ -131,7 +140,7 @@ export async function callAI(messages: AIMessage[]): Promise<AIResponse> {
   }
 
   throw new Error(
-    `Tous les providers IA sont indisponibles (dernier testé : ${lastError}). ` +
-      `Vérifiez vos clés API et vos quotas.`
+    `Tous les providers IA sont indisponibles ou le délai global (${TOTAL_TIMEOUT_MS} ms) est épuisé. ` +
+      `Dernier testé : ${lastError}. Vérifiez vos clés API et vos quotas.`
   );
 }
