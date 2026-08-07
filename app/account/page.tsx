@@ -10,6 +10,7 @@ export default function AccountPage() {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [password, setPassword] = useState("");
 
   if (status === "loading") {
     return (
@@ -27,15 +28,30 @@ export default function AccountPage() {
   }
 
   const removeAccount = async () => {
+    if (!password) {
+      setError("Confirme avec ton mot de passe.");
+      return;
+    }
     setDeleting(true);
     setError("");
     try {
-      const res = await fetch("/api/account", { method: "DELETE" });
-      if (!res.ok) throw new Error("Échec de la suppression");
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(data.error ?? "Échec de la suppression");
+      }
       await signOut({ callbackUrl: "/" });
     } catch (err) {
       console.error("[account] delete error:", err);
-      setError("Impossible de supprimer le compte. Réessaie.");
+      setError(
+        err instanceof Error ? err.message : "Impossible de supprimer le compte. Réessaie."
+      );
       setDeleting(false);
     }
   };
@@ -73,23 +89,35 @@ export default function AccountPage() {
             Supprimer mon compte
           </button>
         ) : (
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={removeAccount}
-              disabled={deleting}
-              className="rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-            >
-              {deleting ? "Suppression…" : "Oui, supprimer définitivement"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              disabled={deleting}
-              className="btn-ghost"
-            >
-              Annuler
-            </button>
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="label-field">Confirmer avec le mot de passe</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] outline-none transition-colors focus:border-[var(--color-accent)]"
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={removeAccount}
+                disabled={deleting || !password}
+                className="rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+              >
+                {deleting ? "Suppression…" : "Oui, supprimer définitivement"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={deleting}
+                className="btn-ghost"
+              >
+                Annuler
+              </button>
+            </div>
           </div>
         )}
 

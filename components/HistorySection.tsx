@@ -67,10 +67,15 @@ function formatRelative(dateStr: string): string {
 
 type Props = {
   refreshKey?: number;
+  enabled?: boolean;
   onRegenerate?: (prompt: string, title: string) => void;
 };
 
-export default function HistorySection({ refreshKey = 0, onRegenerate }: Props) {
+export default function HistorySection({
+  refreshKey = 0,
+  enabled = true,
+  onRegenerate,
+}: Props) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,23 +85,35 @@ export default function HistorySection({ refreshKey = 0, onRegenerate }: Props) 
   const [filter, setFilter] = useState<Filter>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const fetchHistory = () => {
-    fetch("/api/history")
+  useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      setError("auth");
+      setItems([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+
+    fetch("/api/history", { signal: controller.signal })
       .then((res) => {
         if (res.status === 401) throw new Error("auth");
         if (!res.ok) throw new Error("Chargement impossible");
         return res.json();
       })
       .then((data) => setItems(Array.isArray(data.prompts) ? data.prompts : []))
-      .catch((err) => setError(err.message === "auth" ? "auth" : "load"))
-      .finally(() => setLoading(false));
-  };
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(err.message === "auth" ? "auth" : "load");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
 
-  useEffect(() => {
-    setLoading(true);
-    setError("");
-    fetchHistory();
-  }, [refreshKey]);
+    return () => controller.abort();
+  }, [refreshKey, enabled]);
 
   const deleteItem = async (id: string) => {
     setDeletingId(id);
@@ -314,7 +331,6 @@ export default function HistorySection({ refreshKey = 0, onRegenerate }: Props) 
                         onClick={() => deleteItem(item.id)}
                         disabled={deleting}
                         className="btn-ghost text-[var(--color-text-muted)] hover:bg-[var(--color-error-bg)] hover:text-[var(--color-error)]"
-                        aria-label="Supprimer cet élément"
                       >
                         {deleting ? (
                           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--color-border)] border-t-[var(--color-error)]" aria-hidden="true" />

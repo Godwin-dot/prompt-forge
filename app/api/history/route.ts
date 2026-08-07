@@ -1,18 +1,17 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { randomBytes } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const authed = await requireUser();
+  if (!authed) {
     return NextResponse.json({ error: "Non connecté." }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = authed.id;
 
   try {
     const prompts = await prisma.generatedPrompt.findMany({
@@ -31,11 +30,11 @@ export async function GET() {
 }
 
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const authed = await requireUser();
+  if (!authed) {
     return NextResponse.json({ error: "Non connecté." }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = authed.id;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -66,11 +65,11 @@ export async function DELETE(req: Request) {
 
 // Marque un prompt comme "utilisé" (ou non) / génère un token de partage.
 export async function PATCH(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const authed = await requireUser();
+  if (!authed) {
     return NextResponse.json({ error: "Non connecté." }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = authed.id;
 
   try {
     const { searchParams } = new URL(req.url);

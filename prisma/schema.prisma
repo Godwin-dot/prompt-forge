@@ -29,6 +29,16 @@ model ApiUsage {
   @@index([userId, endpoint, createdAt])
 }
 
+// Limites par IP, pour les endpoints publics ou la création de comptes.
+model IpUsage {
+  id        String   @id @default(cuid())
+  ip        String
+  endpoint  String
+  createdAt DateTime @default(now())
+
+  @@index([ip, endpoint, createdAt])
+}
+
 model GeneratedPrompt {
   id                  String   @id @default(cuid())
   userInput           String

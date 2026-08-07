@@ -73,7 +73,16 @@ export default function Home() {
     setUserInput("");
     setPrompt("");
     setQuestions([]);
+    setProvider("");
+    setModel(null);
+    setDurationMs(undefined);
+    setSaved(undefined);
+    setRemaining(undefined);
     setError("");
+    setSaveOption(true);
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {}
   }, []);
 
   // Rappel du brouillon à l'arrivée (étape 1).
@@ -114,7 +123,7 @@ export default function Home() {
       previousQuestions?: string[];
       previousAnswers?: string[];
     },
-    options?: GenerateOptions
+    options?: Partial<GenerateOptions> & { save?: boolean }
   ) {
     setLoading(true);
     setError("");
@@ -123,7 +132,11 @@ export default function Home() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, save: saveOption, ...options }),
+        body: JSON.stringify({
+          ...payload,
+          ...options,
+          save: options?.save ?? saveOption,
+        }),
       });
 
       const data = (await res.json()) as AIResult & { error?: string };
@@ -172,20 +185,23 @@ export default function Home() {
       setSaveOption(save);
       setPrompt("");
       setQuestions([]);
-      generate({ userInput: input }, options);
+      generate({ userInput: input }, { ...options, save });
     },
     [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const handleAnswersSubmit = useCallback(
     (answers: string[]) => {
-      generate({
-        userInput,
-        previousQuestions: questions,
-        previousAnswers: answers,
-      });
+      generate(
+        {
+          userInput,
+          previousQuestions: questions,
+          previousAnswers: answers,
+        },
+        { save: saveOption }
+      );
     },
-    [userInput, questions] // eslint-disable-line react-hooks/exhaustive-deps
+    [userInput, questions, saveOption] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // "Régénérer" depuis l'historique : réaffiche directement ce prompt en étape 3.
@@ -291,7 +307,11 @@ export default function Home() {
 
       {/* Historique */}
       <div className="pt-4">
-        <HistorySection refreshKey={historyKey} onRegenerate={handleRegenerate} />
+        <HistorySection
+          refreshKey={historyKey}
+          enabled={status === "authenticated"}
+          onRegenerate={handleRegenerate}
+        />
       </div>
     </main>
   );

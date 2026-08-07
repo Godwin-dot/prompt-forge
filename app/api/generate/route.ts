@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { callAI, type AIMessage } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import {
   checkRateLimit,
   getRemainingQuota,
@@ -103,33 +102,25 @@ async function requestAI(
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const authed = await requireUser();
+  if (!authed) {
     return NextResponse.json({ error: "Non connecté." }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = authed.id;
 
-  const { allowed, retryAfterSeconds } = await checkRateLimit(
-    userId,
-    RATE_LIMIT_ENDPOINTS.GENERATE
-  );
-  if (!allowed) {
-    return NextResponse.json(
-      {
-        error: `Quota de génération dépassé. Réessaie dans ${retryAfterSeconds} s.`,
-      },
-      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
-    );
-  }
-
-  let body: GenerateRequest;
+  let body: unknown;
   try {
-    body = (await req.json()) as GenerateRequest;
+    body = await req.json();
   } catch {
     return NextResponse.json({ error: "Corps JSON invalide." }, { status: 400 });
   }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return NextResponse.json({ error: "Corps JSON invalide." }, { status: 400 });
+  }
+  const payload = body as GenerateRequest;
 
-  const userInput = typeof body.userInput === "string" ? body.userInput.trim() : "";
+  const userInput =
+    typeof payload.userInput === "string" ? payload.userInput.trim() : "";
   if (!userInput) {
     return NextResponse.json(
       { error: "Le champ 'userInput' est requis." },
@@ -145,10 +136,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const validateList = (
-    label: string,
-    value: unknown
-  ): string[] | null => {
+  const validateList = (value: unknown): string[] | null => {
     if (value === undefined) return [];
     if (!Array.isArray(value)) return null;
     if (value.length > MAX_QUESTIONS) return null;
@@ -158,8 +146,8 @@ export async function POST(req: NextRequest) {
     return value as string[];
   };
 
-  const previousQuestions = validateList("previousQuestions", body.previousQuestions);
-  const previousAnswers = validateList("previousAnswers", body.previousAnswers);
+  const previousQuestions = validateList(payload.previousQuestions);
+  const previousAnswers = validateList(payload.previousAnswers);
 
   if (previousQuestions === null || previousAnswers === null) {
     return NextResponse.json(
@@ -174,11 +162,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // La validation est passée : on peut consommer du quota.
+  const { allowed, retryAfterSeconds } = await checkRateLimit(
+    userId,
+    RATE_LIMIT_ENDPOINTS.GENERATE
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        error: `Quota de génération dépassé. Réessaie dans ${retryAfterSeconds} s.`,
+      },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+    );
+  }
+
   // Paramètres optionnels (température, style, conservation).
   let temperature = 0.7;
-  if (typeof body.temperature === "number") {
-    if (Number.isFinite(body.temperature) && body.temperature >= 0 && body.temperature <= 2) {
-      temperature = body.temperature;
+  if (typeof payload.temperature === "number") {
+    if (Number.isFinite(payload.temperature) && payload.temperature >= 0 && payload.temperature <= 2) {
+      temperature = payload.temperature;
     } else {
       return NextResponse.json(
         { error: "La température doit être comprise entre 0 et 2." },
@@ -188,19 +190,19 @@ export async function POST(req: NextRequest) {
   }
 
   const style: PromptStyle =
-    body.style && STYLES.includes(body.style) ? body.style : "balanced";
+    payload.style && STYLES.includes(payload.style) ? payload.style : "balanced";
 
-  const save = body.save !== false;
+  const save = typeof payload.save === "boolean" ? payload.save : true;
 
   const startedAt = Date.now();
 
   const messages: AIMessage[] = [
     buildSystemPrompt(style),
-    buildUserMessage(userInput, body.previousQuestions, body.previousAnswers),
+    buildUserMessage(userInput, payload.previousQuestions, payload.previousAnswers),
   ];
 
   // Dès que l'utilisateur a répondu aux questions, on exige le prompt final.
-  const forceFinal = Boolean(body.previousAnswers?.length);
+  const forceFinal = Boolean(payload.previousAnswers?.length);
 
   const persistFinal = async (finalPrompt: string, provider: string, model?: string) => {
     const durationMs = Date.now() - startedAt;
@@ -208,11 +210,11 @@ export async function POST(req: NextRequest) {
       await prisma.generatedPrompt.create({
         data: {
           userInput,
-          clarifyingQuestions: body.previousQuestions?.length
-            ? JSON.stringify(body.previousQuestions)
+          clarifyingQuestions: payload.previousQuestions?.length
+            ? JSON.stringify(payload.previousQuestions)
             : null,
-          clarifyingAnswers: body.previousAnswers?.length
-            ? JSON.stringify(body.previousAnswers)
+          clarifyingAnswers: payload.previousAnswers?.length
+            ? JSON.stringify(payload.previousAnswers)
             : null,
           finalPrompt,
           provider,
@@ -261,8 +263,8 @@ export async function POST(req: NextRequest) {
       );
       const fallback = buildLocalFinalPrompt(
         userInput,
-        body.previousQuestions,
-        body.previousAnswers
+        payload.previousQuestions,
+        payload.previousAnswers
       );
       try {
         return await persistFinal(fallback, "local");

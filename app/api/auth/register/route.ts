@@ -1,20 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import {
+  checkIpRateLimit,
+  getClientIp,
+  RATE_LIMIT_ENDPOINTS,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  let body: { email?: unknown; password?: unknown };
+  const ip = getClientIp(req) ?? "unknown";
+  const { allowed } = await checkIpRateLimit(ip, RATE_LIMIT_ENDPOINTS.REGISTER);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Trop de créations de compte depuis cette adresse." },
+      { status: 429 }
+    );
+  }
+
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Corps JSON invalide." }, { status: 400 });
   }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return NextResponse.json({ error: "Corps JSON invalide." }, { status: 400 });
+  }
+  const { email: emailRaw, password: passwordRaw } = body as {
+    email?: unknown;
+    password?: unknown;
+  };
 
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  const password = typeof body.password === "string" ? body.password : "";
+  const email = typeof emailRaw === "string" ? emailRaw.trim().toLowerCase() : "";
+  const password = typeof passwordRaw === "string" ? passwordRaw : "";
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Adresse email invalide." }, { status: 400 });

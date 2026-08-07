@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Props = {
   text: string;
@@ -21,10 +21,12 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
+const WORD_INTERVAL_MS = 12;
+
 export default function RevealText({ text, start = true }: Props) {
   const reduced = usePrefersReducedMotion();
   const [count, setCount] = useState(0);
-  const words = text.split(" ");
+  const words = useMemo(() => text.split(" "), [text]);
 
   useEffect(() => {
     if (!start || reduced) {
@@ -37,9 +39,15 @@ export default function RevealText({ text, start = true }: Props) {
       i += 1;
       setCount(i);
       if (i >= words.length) clearInterval(timer);
-    }, 12);
+    }, WORD_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [text, start, reduced, words.length]);
+
+  // On évite de re-rendre pour rien quand le texte est déjà entièrement révélé
+  // (par ex. si text.length change). words.length est stable grâce à useMemo.
+  if (reduced || !start) {
+    return <>{text}{" "}</>;
+  }
 
   return (
     <>
