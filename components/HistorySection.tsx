@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import TerminalBlock from "@/components/TerminalBlock";
 
 type HistoryItem = {
@@ -71,7 +71,7 @@ type Props = {
   onRegenerate?: (prompt: string, title: string) => void;
 };
 
-export default function HistorySection({
+export default memo(function HistorySection({
   refreshKey = 0,
   enabled = true,
   onRegenerate,
@@ -84,6 +84,7 @@ export default function HistorySection({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) {
@@ -326,19 +327,36 @@ export default function HistorySection({
                           Régénérer
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => deleteItem(item.id)}
-                        disabled={deleting}
-                        className="btn-ghost text-[var(--color-text-muted)] hover:bg-[var(--color-error-bg)] hover:text-[var(--color-error)]"
-                      >
-                        {deleting ? (
-                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--color-border)] border-t-[var(--color-error)]" aria-hidden="true" />
-                        ) : (
+                      {confirmDeleteId === item.id ? (
+                        <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
+                          <span>Confirmer ?</span>
+                          <button
+                            type="button"
+                            onClick={() => deleteItem(item.id)}
+                            disabled={deleting}
+                            className="rounded border border-[var(--color-error)]/50 px-2 py-0.5 text-xs font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error-bg)]"
+                          >
+                            {deleting ? "Suppression…" : "Supprimer"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            disabled={deleting}
+                            className="px-2 py-0.5 text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                          >
+                            Annuler
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(item.id)}
+                          className="btn-ghost text-[var(--color-text-muted)] hover:bg-[var(--color-error-bg)] hover:text-[var(--color-error)]"
+                        >
                           <TrashIcon />
-                        )}
-                        Supprimer
-                      </button>
+                          Supprimer
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -349,4 +367,4 @@ export default function HistorySection({
       </ul>
     </section>
   );
-}
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, KeyboardEvent } from "react";
+import { memo, useRef, useEffect, useState, KeyboardEvent } from "react";
 
 type Props = {
   value: string;
@@ -39,11 +39,18 @@ const STYLE_LABELS: Record<GenerateOptions["style"], string> = {
   detailed: "Détaillé",
 };
 
-export default function InputStep({ value, onChange, onSubmit, loading }: Props) {
+const STYLE_ORDER: Array<GenerateOptions["style"]> = ["concise", "balanced", "detailed"];
+
+const MemoizedInputStep = memo(function InputStep({ value, onChange, onSubmit, loading }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [save, setSave] = useState(true);
   const [temperature, setTemperature] = useState(0.7);
   const [style, setStyle] = useState<GenerateOptions["style"]>("balanced");
+  const styleRefs = useRef<Record<GenerateOptions["style"], HTMLButtonElement | null>>({
+    concise: null,
+    balanced: null,
+    detailed: null,
+  });
 
   const resize = () => {
     const el = textareaRef.current;
@@ -58,6 +65,25 @@ export default function InputStep({ value, onChange, onSubmit, loading }: Props)
   }, []);
 
   useEffect(resize, [value]);
+
+  // Navigation clavier du radiogroup style (flèches gauche/droite).
+  const handleStyleKeyDown = (
+    e: KeyboardEvent<HTMLButtonElement>,
+    current: GenerateOptions["style"]
+  ) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const idx = STYLE_ORDER.indexOf(current);
+    let nextIdx;
+    if (e.key === "ArrowLeft") {
+      nextIdx = (idx - 1 + STYLE_ORDER.length) % STYLE_ORDER.length;
+    } else {
+      nextIdx = (idx + 1) % STYLE_ORDER.length;
+    }
+    const next = STYLE_ORDER[nextIdx];
+    setStyle(next);
+    styleRefs.current[next]?.focus();
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !loading) {
@@ -145,11 +171,16 @@ export default function InputStep({ value, onChange, onSubmit, loading }: Props)
             {(Object.keys(STYLE_LABELS) as Array<GenerateOptions["style"]>).map((s) => (
               <button
                 key={s}
+                ref={(el) => {
+                  styleRefs.current[s] = el;
+                }}
                 type="button"
                 role="radio"
                 aria-checked={style === s}
+                tabIndex={style === s ? 0 : -1}
                 disabled={loading}
                 onClick={() => setStyle(s)}
+                onKeyDown={(e) => handleStyleKeyDown(e, s)}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                   style === s
                     ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
@@ -189,4 +220,6 @@ export default function InputStep({ value, onChange, onSubmit, loading }: Props)
       </div>
     </form>
   );
-}
+});
+
+export default MemoizedInputStep;

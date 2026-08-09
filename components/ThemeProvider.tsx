@@ -14,6 +14,9 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme);
+  try {
+    localStorage.setItem("pf-theme", theme);
+  } catch {}
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

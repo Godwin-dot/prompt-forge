@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import TerminalBlock from "@/components/TerminalBlock";
 import RevealText from "@/components/RevealText";
 
@@ -34,7 +34,7 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)} s`;
 }
 
-export default function ResultStep({
+export default memo(function ResultStep({
   prompt,
   provider,
   model,
@@ -111,4 +111,4 @@ export default function ResultStep({
       </div>
     </div>
   );
-}
+});

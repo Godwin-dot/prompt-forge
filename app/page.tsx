@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import InputStep, { type GenerateOptions } from "@/components/InputStep";
@@ -67,6 +67,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [historyKey, setHistoryKey] = useState(0);
+  const stepRef = useRef<HTMLDivElement>(null);
+  const [announcement, setAnnouncement] = useState("");
 
   const reset = useCallback(() => {
     setStep("input");
@@ -94,13 +96,21 @@ export default function Home() {
     } catch {}
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sauvegarde auto du brouillon tant qu'on écrit (non envoyé, non en étape résultat).
+  // Sauvegarde auto du brouillon tant qu'on écrit (débouncé pour ne pas écrire
+// localStorage à chaque frappe).
   const handleInputChange = useCallback((value: string) => {
     setUserInput(value);
-    try {
-      localStorage.setItem(DRAFT_KEY, value);
-    } catch {}
   }, []);
+
+  useEffect(() => {
+    if (step !== "input") return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, userInput);
+      } catch {}
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [userInput, step]);
 
   // Chiffre du quota affiché en étape 1.
   const loadQuota = useCallback(async () => {
@@ -211,6 +221,10 @@ export default function Home() {
     setStep("result");
     setSaved(false);
     setUserInput(title);
+    setProvider("");
+    setModel(null);
+    setDurationMs(undefined);
+    setRemaining(undefined);
   }, []);
 
   // Remonte en haut de page à chaque changement d'écran.
@@ -218,26 +232,37 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [step]);
 
-  // Échap contextuel : retour à l'étape précédente, sinon retour au départ.
+  // Annonce du changement d'étape (lecteurs d'écran) + focus sur le contenu.
+  useEffect(() => {
+    setAnnouncement(`${SCREEN_LABEL[step]} — ${SCREEN_TITLE[step]}`);
+    window.requestAnimationFrame(() => {
+      stepRef.current?.focus();
+    });
+  }, [step]);
+
+  // Échap contextuel : ne fait que revenir des questions à l'étape 1.
+  // Il ne touche jamais au brouillon ni au résultat (rien de destructif).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key !== "Escape") return;
+      if (step === "questions") {
         e.preventDefault();
-        if (step === "questions") {
-          setStep("input");
-        } else {
-          reset();
-        }
+        setStep("input");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, reset]);
+  }, [step]);
 
   return (
     <main className="mx-auto flex w-full max-w-[640px] flex-col gap-10 px-5 py-10 sm:px-6 sm:py-14">
+      {/* Annonce visuellement cachée pour les lecteurs d'écran */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+
       {/* En-tête d'écran */}
-      <div key={`head-${step}`} className="animate-screen flex flex-col gap-3">
+      <div ref={stepRef} tabIndex={-1} key={`head-${step}`} className="animate-screen focus:outline-none flex flex-col gap-3">
         <span className="label-step">{SCREEN_LABEL[step]}</span>
         <h1 className="text-[28px] font-semibold leading-[1.2] tracking-tight text-[var(--color-text)] sm:text-[32px]">
           {SCREEN_TITLE[step]}

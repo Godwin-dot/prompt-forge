@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, KeyboardEvent } from "react";
+import { memo, useState, useEffect, useRef, KeyboardEvent } from "react";
 
 type Props = {
   questions: string[];
@@ -9,7 +9,7 @@ type Props = {
   loading: boolean;
 };
 
-export default function QuestionsStep({ questions, onSubmit, onBack, loading }: Props) {
+export default memo(function QuestionsStep({ questions, onSubmit, onBack, loading }: Props) {
   const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ""));
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -96,4 +96,4 @@ export default function QuestionsStep({ questions, onSubmit, onBack, loading }: 
       </div>
     </form>
   );
-}
+});

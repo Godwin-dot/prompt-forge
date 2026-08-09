@@ -32,6 +32,11 @@ export default function PrivacyConsent() {
     acceptRef.current?.focus();
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        accept();
+        return;
+      }
       if (e.key !== "Tab") return;
       const dialog = dialogRef.current;
       if (!dialog) return;
@@ -71,7 +76,12 @@ export default function PrivacyConsent() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) accept();
+      }}
+    >
       <div
         ref={dialogRef}
         role="dialog"

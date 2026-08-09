@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   text: string;
   start?: boolean;
 };
 
-// Révèle le texte mot à mot (effet de streaming perçu). Respecte
-// prefers-reduced-motion en affichant tout d'un coup.
+// Révèle le texte mot à mot par paquets (effet de streaming perçu) sans
+// casser le CPU : un paquet de mots à chaque tick au lieu d'un seul mot.
+// Respecte prefers-reduced-motion en affichant tout d'un coup.
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -21,38 +22,37 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-const WORD_INTERVAL_MS = 12;
+const TICK_MS = 50;
+const WORDS_PER_TICK = 8;
 
 export default function RevealText({ text, start = true }: Props) {
   const reduced = usePrefersReducedMotion();
-  const [count, setCount] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(0);
   const words = useMemo(() => text.split(" "), [text]);
+  const countRef = useRef(0);
 
   useEffect(() => {
     if (!start || reduced) {
-      setCount(words.length);
+      setVisibleCount(words.length);
       return;
     }
-    setCount(0);
-    let i = 0;
+    countRef.current = 0;
+    setVisibleCount(0);
     const timer = setInterval(() => {
-      i += 1;
-      setCount(i);
-      if (i >= words.length) clearInterval(timer);
-    }, WORD_INTERVAL_MS);
+      countRef.current = Math.min(
+        countRef.current + WORDS_PER_TICK,
+        words.length
+      );
+      setVisibleCount(countRef.current);
+      if (countRef.current >= words.length) clearInterval(timer);
+    }, TICK_MS);
     return () => clearInterval(timer);
   }, [text, start, reduced, words.length]);
 
-  // On évite de re-rendre pour rien quand le texte est déjà entièrement révélé
-  // (par ex. si text.length change). words.length est stable grâce à useMemo.
-  if (reduced || !start) {
-    return <>{text}{" "}</>;
-  }
-
   return (
     <>
-      {words.slice(0, count).join(" ")}
-      {count < words.length ? " █" : ""}
+      {words.slice(0, visibleCount).join(" ")}
+      {visibleCount < words.length ? " █" : ""}
     </>
   );
 }

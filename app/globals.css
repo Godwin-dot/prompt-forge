@@ -7,6 +7,7 @@
 --------------------------------------------------------------------------- */
 :root,
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --color-bg: #0a0a0a;
   --color-surface: #111111;
   --color-surface-hover: #1a1a1a;
@@ -14,22 +15,24 @@
   --color-border-hover: #3a3a3a;
 
   --color-text: #fafafa;
-  --color-text-muted: #a1a1a1;
-  --color-text-subtle: #737373;
+  --color-text-muted: #a3a3a3;
+  --color-text-subtle: #8f8f8f;
 
   --color-accent: #0070f3;
-  --color-accent-hover: #0058c9;
-  --color-accent-halo: rgba(0, 112, 243, 0.25);
-  --color-accent-soft: rgba(0, 112, 243, 0.12);
+  --color-accent-hover: #2f8bff;
+  --color-link: #6cb2ff;
+  --color-accent-halo: rgba(0, 112, 243, 0.28);
+  --color-accent-soft: rgba(0, 112, 243, 0.14);
 
-  --color-error: #ff5f57;
-  --color-error-bg: rgba(255, 95, 87, 0.1);
-  --color-success: #34d399;
+  --color-error: #ff6b63;
+  --color-error-bg: rgba(255, 107, 99, 0.12);
+  --color-success: #4ade80;
 
-  --color-selection: rgba(0, 112, 243, 0.35);
+  --color-selection: rgba(0, 112, 243, 0.38);
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --color-bg: #ffffff;
   --color-surface: #fafafa;
   --color-surface-hover: #f2f2f2;
@@ -40,16 +43,17 @@
   --color-text-muted: #666666;
   --color-text-subtle: #6b6b6b;
 
-  --color-accent: #0070f3;
-  --color-accent-hover: #0060d6;
-  --color-accent-halo: rgba(0, 112, 243, 0.18);
-  --color-accent-soft: rgba(0, 112, 243, 0.08);
+  --color-accent: #0068d6;
+  --color-accent-hover: #0053b3;
+  --color-link: #0056c4;
+  --color-accent-halo: rgba(0, 104, 214, 0.18);
+  --color-accent-soft: rgba(0, 104, 214, 0.08);
 
   --color-error: #d64545;
   --color-error-bg: rgba(214, 69, 69, 0.08);
   --color-success: #059669;
 
-  --color-selection: rgba(0, 112, 243, 0.22);
+  --color-selection: rgba(0, 104, 214, 0.22);
 }
 
 /* Bloc terminal : toujours sombre, quel que soit le thème (signature look) */
@@ -232,7 +236,7 @@ select:focus {
 }
 
 .link {
-  color: var(--color-accent);
+  color: var(--color-link);
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;

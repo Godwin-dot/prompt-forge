@@ -16,10 +16,15 @@ export const metadata: Metadata = {
 };
 
 // Applique data-theme avant le premier paint pour éviter le flash.
+// Priorité : préférence sauvegardée (localStorage) puis préférence système.
 const themeScript = `
 (function () {
   try {
-    var t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    var saved = null;
+    try { saved = localStorage.getItem('pf-theme'); } catch (e) {}
+    var t = saved === 'light' || saved === 'dark'
+      ? saved
+      : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     document.documentElement.setAttribute('data-theme', t);
   } catch (e) {}
 })();
@@ -40,11 +45,19 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
+        <a
+          href="#contenu"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-[var(--color-accent)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+        >
+          Aller au contenu
+        </a>
         <ThemeProvider>
           <Providers>
             <div className="flex min-h-screen flex-col">
               <Header />
-              <div className="flex-1">{children}</div>
+              <div id="contenu" className="flex-1" tabIndex={-1}>
+                {children}
+              </div>
               <Footer />
             </div>
           </Providers>
