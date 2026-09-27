@@ -2,11 +2,11 @@
 
 Générateur de prompts IA : décrivez ce dont vous avez besoin, répondez à quelques
 questions de clarification, et obtenez un prompt optimisé prêt à coller dans
-votre outil d'IA préféré. Multi-fournisseurs avec fallback automatique.
+votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automatique (actif aujourd'hui : Google AI / Gemini).
 
 ## Fonctionnalités
 - Parcours en 3 étapes : idée → précisions → prompt final.
-- Fallback automatique entre 4 fournisseurs (Groq, OpenRouter, Google AI, OpenAI).
+- Repli automatique entre fournisseurs IA (`PROVIDER_DEFINITIONS` dans `lib/ai.ts`) ; Google AI (Gemini) est activé par défaut.
 - Comptes utilisateurs : historique privé, copie et suppression.
 - Suggestions de démarrage, recherche/filtres dans l'historique.
 - Marquer un prompt comme « utilisé », « régénérer », partager un lien public.
@@ -35,7 +35,7 @@ votre outil d'IA préféré. Multi-fournisseurs avec fallback automatique.
    cp .env.example .env
    ```
    - `DATABASE_URL="file:./dev.db"` (SQLite local) ;
-   - une clé IA au choix (`GROQ_API_KEY` + `GROQ_MODEL`, `OPENROUTER_*`, etc.) ;
+   - une clé IA : `GOOGLE_AI_API_KEY` (AI Studio) et `GOOGLE_AI_MODEL` ;
    - `NEXTAUTH_SECRET` (générer avec `openssl rand -base64 32`).
 
 3. Synchroniser la base locale :
@@ -55,7 +55,8 @@ votre outil d'IA préféré. Multi-fournisseurs avec fallback automatique.
 | `npm run dev` | Serveur de développement |
 | `npm run build` | `prisma generate` + build de production |
 | `npm start` | Serveur de production |
-| `npm run lint` | Lint ESLint |
+| `npm test` | Tests unitaires (Vitest) |
+| `npm run lint` | Lint ESLint (nécessite la config ESLint) |
 
 ## Déploiement (Vercel + Turso)
 1. Créez une base Turso et notez son URL et votre jeton.
@@ -64,7 +65,7 @@ votre outil d'IA préféré. Multi-fournisseurs avec fallback automatique.
    - `TURSO_AUTH_TOKEN` = votre jeton
    - `NEXTAUTH_SECRET` = une chaîne aléatoire longue
    - `NEXTAUTH_URL` = l'URL de votre déploiement
-   - vos clés IA (`GROQ_API_KEY`, `OPENROUTER_*`, `GOOGLE_AI_*`, `OPENAI_*`)
+   - vos clés IA (`GOOGLE_AI_API_KEY`, `GOOGLE_AI_MODEL`)
 3. Appliquez le schéma à la base Turso (`prisma/turso-migrate.sql` ou équivalent) :
    ```bash
    DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npx prisma db push
@@ -83,9 +84,19 @@ votre outil d'IA préféré. Multi-fournisseurs avec fallback automatique.
 - Mots de passe hachés (bcrypt), isolation de l'historique par utilisateur.
 
 ## Confidentialité
-Vos idées/réponses sont envoyées à des fournisseurs d'IA tiers pour générer le
-prompt. Voir la page `/privacy` in-app. Des consentement est demandé au premier
+Vos idées/réponses sont envoyées à Google AI (Gemini) pour générer le
+prompt. Voir la page `/privacy` in-app. Un consentement est demandé au premier
 usage.
+
+## Dépannage
+- `GET /api/health` : liste les fournisseurs IA réellement configurés (aucune clé
+  exposée, aucun appel facturé). Réflexe n°1 quand `/api/generate` renvoie une erreur,
+  surtout en production où les logs sont moins accessibles.
+- « Aucun fournisseur IA configuré » : `GOOGLE_AI_API_KEY` ou `GOOGLE_AI_MODEL` manquante.
+- « Tous les fournisseurs IA sont indisponibles » : clé invalide, modèle retiré par le
+  fournisseur (vérifier la liste des modèles disponibles) ou quota épuisé. Le détail de
+  chaque échec est logué côté serveur : `[ai] <fournisseur> a échoué (… )`.
+- Les messages d'erreur de l'API sont affichés tels quels dans l'interface.
 
 ## Roadmap (backlog)
 - Vérification email, réinitialisation de mot de passe.

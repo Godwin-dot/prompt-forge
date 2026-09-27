@@ -183,7 +183,11 @@ export default function Home() {
       }
     } catch (err) {
       console.error("[page] Erreur :", err);
-      setError("La génération a échoué, réessaie.");
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "La génération a échoué, réessaie."
+      );
       setStep("input");
     } finally {
       setLoading(false);

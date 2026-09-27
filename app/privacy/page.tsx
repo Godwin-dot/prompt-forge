@@ -19,10 +19,9 @@ export default function PrivacyPage() {
           </h2>
           <p>
             Votre idée initiale et vos réponses aux questions de clarification
-            sont transmises à un fournisseur d&apos;IA tiers (Groq, OpenRouter,
-            Google AI ou OpenAI) afin de générer votre prompt optimisé. Ces
-            fournisseurs peuvent stocker et utiliser les données transmises
-            selon leurs propres politiques.
+            sont transmises à Google AI (Gemini), un fournisseur d&apos;IA tiers,
+            afin de générer votre prompt optimisé. Ce fournisseur peut stocker
+            et utiliser les données transmises selon sa propre politique.
           </p>
         </section>
 

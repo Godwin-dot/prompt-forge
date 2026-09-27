@@ -97,7 +97,7 @@ export default function PrivacyConsent() {
         </h2>
         <p className="mt-3 text-sm leading-[1.6] text-[var(--color-text-muted)]">
           Ton idée et tes réponses sont envoyées à un fournisseur d&apos;IA externe
-          (Groq, OpenRouter, Google AI ou OpenAI) pour générer ton prompt. Elles
+          (Google AI / Gemini) pour générer ton prompt. Elles
           ne sont pas utilisées pour t&apos;identifier ; évite d&apos;y inscrire des
           données personnelles sensibles. Chaque prompt final est enregistré
           dans ton historique privé.

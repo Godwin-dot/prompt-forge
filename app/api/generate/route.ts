@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callAI, type AIMessage } from "@/lib/ai";
+import { callAI, AIUnavailableError, type AIMessage } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import {
@@ -274,9 +274,12 @@ export async function POST(req: NextRequest) {
     }
 
     console.error("[api/generate] Erreur :", error);
+    // 503 = fournisseur momentanément saturé (l'utilisateur peut réessayer),
+    // 502 = échec définitif (clé/modèle/quota) ou délai global dépassé.
+    const status = error instanceof AIUnavailableError ? error.status : 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Erreur inattendue." },
-      { status: 500 }
+      { status }
     );
   }
 }
