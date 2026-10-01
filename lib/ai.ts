@@ -8,7 +8,6 @@ export type AIProvider = {
   baseUrl: string;
   apiKey: string;
   model: string;
-  headers?: Record<string, string>;
 };
 
 export type AIResponse = {
@@ -30,8 +29,6 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const TOTAL_TIMEOUT_MS = 30_000;
 
 // Erreurs transitoires : le fournisseur est surchargé ou limité temporairement.
-// Cas réel rencontré : Gemini 503 « This model is currently experiencing high
-// demand » — même le modèle recommandé par Google tombe parfois en saturation.
 const TRANSIENT_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [700, 1600];
@@ -50,62 +47,25 @@ export class AIUnavailableError extends Error {
   }
 }
 
-// Un fournisseur = un préfixe de variables d'environnement EXPLICITE.
-// Correctif : le préfixe était déduit du nom (`google` -> `GOOGLE_*`) alors que
-// le .env fournit `GOOGLE_AI_*` ; la clé Google n'était donc jamais lue et le
-// fournisseur était ignoré en silence (aucune erreur, aucun appel).
-type ProviderDefinition = {
-  name: string;
-  envPrefix: string;
-  // Endpoint /chat/completions complet, compatible OpenAI.
-  baseUrl: string;
-  headers?: (env: NodeJS.ProcessEnv) => Record<string, string>;
-};
-
-// Ordre = priorité de repli. Les modèles séparés par des virgules sont tentés
-// dans l'ordre fourni avant de passer au fournisseur suivant.
-const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
-  {
-    name: "google",
-    envPrefix: "GOOGLE_AI",
-    baseUrl:
-      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-  },
-  {
-    name: "groq",
-    envPrefix: "GROQ",
-    baseUrl: "https://api.groq.com/openai/v1/chat/completions",
-  },
-  {
-    name: "openrouter",
-    envPrefix: "OPENROUTER",
-    baseUrl: "https://openrouter.ai/api/v1/chat/completions",
-    headers: (env) => ({
-      ...(env.NEXTAUTH_URL ? { "HTTP-Referer": env.NEXTAUTH_URL } : {}),
-      "X-Title": "Prompt Forge",
-    }),
-  },
-];
+const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/chat/completions";
 
 export function getAvailableProviders(): AIProvider[] {
-  return PROVIDER_DEFINITIONS.flatMap((definition) => {
-    const apiKey = process.env[`${definition.envPrefix}_API_KEY`] ?? "";
-    const models = (process.env[`${definition.envPrefix}_MODEL`] ?? "")
-      .split(",")
-      .map((model) => model.trim())
-      .filter(Boolean);
+  // OPENAI_* remains a migration alias for existing .env files; requests still
+  // go exclusively to Z.ai. Configure ZAI_* for new deployments.
+  const apiKey = process.env.ZAI_API_KEY || process.env.OPENAI_API_KEY || "";
+  const models = (process.env.ZAI_MODEL || process.env.OPENAI_MODEL || "")
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
 
-    if (!apiKey || models.length === 0) return [];
+  if (!apiKey || models.length === 0) return [];
 
-    return models.map((model) => ({
-      name: definition.name,
-      baseUrl:
-        process.env[`${definition.envPrefix}_BASE_URL`] ?? definition.baseUrl,
-      apiKey,
-      model,
-      headers: definition.headers?.(process.env),
-    }));
-  });
+  return models.map((model) => ({
+    name: "Z.ai",
+    baseUrl: ZAI_BASE_URL,
+    apiKey,
+    model,
+  }));
 }
 
 // Un appel fournisseur, avec réessais espacés sur erreur transitoire.
@@ -134,7 +94,6 @@ async function callProvider(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${provider.apiKey}`,
-          ...provider.headers,
         },
         body: JSON.stringify({
           model: provider.model,
@@ -210,8 +169,7 @@ export async function callAI(
 
   if (providers.length === 0) {
     throw new Error(
-      "Aucun fournisseur IA configuré. Renseigne au moins une paire de variables " +
-        "API_KEY et MODEL pour Google AI, Groq ou OpenRouter."
+      "Z.ai n'est pas configuré. Renseigne ZAI_API_KEY et ZAI_MODEL."
     );
   }
 
@@ -259,7 +217,7 @@ export async function callAI(
     new Set(providers.map((provider) => provider.name))
   );
   throw new AIUnavailableError(
-    `Tous les fournisseurs IA sont indisponibles (${providerNames.join(", ")}). ` +
+    `Z.ai est indisponible (${providerNames.join(", ")}). ` +
       (timedOut
         ? `Le délai global (${TOTAL_TIMEOUT_MS} ms) est épuisé.`
         : `Échecs : ${failures.join(", ")}. Vérifie la configuration du fournisseur et les quotas.`),

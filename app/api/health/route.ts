@@ -16,14 +16,12 @@ export async function GET() {
         name: p.name,
         model: p.model,
         baseUrl: p.baseUrl,
-        // Seule la longueur est exposée : utile pour repérer une clé tronquée
-        // lors d'un copier-coller dans les variables d'environnement.
-        apiKeyLength: p.apiKey.length,
+        apiKeyConfigured: Boolean(p.apiKey),
       })),
       hint:
         providers.length > 0
-          ? "Fournisseur configuré. Si /api/generate échoue encore, la clé est invalide, le modèle a été retiré ou le quota est épuisé : voir les logs serveur ([ai] ...)."
-          : "Aucun fournisseur IA configuré : renseigne GOOGLE_AI_API_KEY et GOOGLE_AI_MODEL (.env en local, variables d'environnement en production).",
+          ? "Z.ai est configuré. Si /api/generate échoue, vérifie le statut HTTP dans les logs serveur ([ai] ...)."
+          : "Z.ai n'est pas configuré : renseigne ZAI_API_KEY et ZAI_MODEL (.env en local, variables d'environnement en production).",
     },
     { status: providers.length > 0 ? 200 : 503 }
   );

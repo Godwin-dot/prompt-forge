@@ -2,11 +2,11 @@
 
 Générateur de prompts IA : décrivez ce dont vous avez besoin, répondez à quelques
 questions de clarification, et obtenez un prompt optimisé prêt à coller dans
-votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automatique entre Google AI, Groq et OpenRouter.
+votre outil d'IA préféré. Le service de génération utilise exclusivement l'API Z.ai.
 
 ## Fonctionnalités
 - Parcours en 3 étapes : idée → précisions → prompt final.
-- Repli automatique entre Google AI, Groq et OpenRouter (`PROVIDER_DEFINITIONS` dans `lib/ai.ts`), dans cet ordre ; plusieurs modèles peuvent être fournis, séparés par des virgules.
+- Génération via Z.ai ; plusieurs modèles Z.ai facultatifs peuvent être fournis, séparés par des virgules, et sont essayés dans l'ordre.
 - Comptes utilisateurs : historique privé, copie et suppression.
 - Suggestions de démarrage, recherche/filtres dans l'historique.
 - Marquer un prompt comme « utilisé », « régénérer », partager un lien public.
@@ -35,7 +35,7 @@ votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automati
    cp .env.example .env
    ```
    - `DATABASE_URL="file:./dev.db"` (SQLite local) ;
-   - au moins un fournisseur IA : une clé (`GOOGLE_AI_API_KEY`, `GROQ_API_KEY` ou `OPENROUTER_API_KEY`) et son modèle (`*_MODEL`) ;
+   - une clé Z.ai (`ZAI_API_KEY`) et un modèle (`ZAI_MODEL`) ;
    - `NEXTAUTH_SECRET` (générer avec `openssl rand -base64 32`).
 
 3. Synchroniser la base locale :
@@ -65,7 +65,7 @@ votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automati
    - `TURSO_AUTH_TOKEN` = votre jeton
    - `NEXTAUTH_SECRET` = une chaîne aléatoire longue
    - `NEXTAUTH_URL` = l'URL de votre déploiement
-   - les clés et modèles du ou des fournisseurs IA choisis (`GOOGLE_AI_*`, `GROQ_*`, `OPENROUTER_*`)
+   - `ZAI_API_KEY` et `ZAI_MODEL`
 3. Appliquez le schéma à la base Turso (`prisma/turso-migrate.sql` ou équivalent) :
    ```bash
    DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npx prisma db push
@@ -84,17 +84,16 @@ votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automati
 - Mots de passe hachés (bcrypt), isolation de l'historique par utilisateur.
 
 ## Confidentialité
-Vos idées/réponses sont envoyées au premier fournisseur IA configuré qui répond
-(Google AI, Groq ou OpenRouter) pour générer le prompt. Consultez la page
-`/privacy` in-app et les politiques du fournisseur utilisé. Un consentement est
-demandé au premier usage.
+Vos idées/réponses sont envoyées à Z.ai pour générer le prompt. Consultez la page
+`/privacy` in-app et la politique de confidentialité de Z.ai. Un consentement
+est demandé au premier usage.
 
 ## Dépannage
-- `GET /api/health` : liste les fournisseurs IA réellement configurés (aucune clé
+- `GET /api/health` : indique si Z.ai est configuré (aucune clé
   exposée, aucun appel facturé). Réflexe n°1 quand `/api/generate` renvoie une erreur,
   surtout en production où les logs sont moins accessibles.
-- « Aucun fournisseur IA configuré » : aucune paire clé/modèle n'est renseignée pour Google AI, Groq ou OpenRouter.
-- « Tous les fournisseurs IA sont indisponibles » : consulter les logs serveur `[ai]`; ils indiquent le fournisseur, le modèle et le statut HTTP, sans contenu de réponse fournisseur. 401/403 indique un problème d'accès à la clé, 400/404 une configuration/requête/modèle à vérifier, 402/429 le quota ou la limite de débit; les 5xx sont généralement temporaires.
+- « Z.ai n'est pas configuré » : `ZAI_API_KEY` ou `ZAI_MODEL` manque. Les anciens fichiers `.env` peuvent encore utiliser `OPENAI_API_KEY` et `OPENAI_MODEL` comme alias de migration; la requête part toujours uniquement vers Z.ai.
+- « Z.ai est indisponible » : consulter les logs serveur `[ai]`; ils indiquent le modèle et le statut HTTP, sans contenu de réponse fournisseur. 401/403 indique un problème d'accès à la clé, 400/404 une configuration/requête/modèle à vérifier, 402/429 le quota ou la limite de débit; les 5xx sont généralement temporaires.
 - Les messages d'erreur de l'API sont affichés tels quels dans l'interface.
 
 ## Roadmap (backlog)
