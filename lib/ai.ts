@@ -8,6 +8,7 @@ export type AIProvider = {
   baseUrl: string;
   apiKey: string;
   model: string;
+  headers?: Record<string, string>;
 };
 
 export type AIResponse = {
@@ -54,13 +55,11 @@ type ProviderDefinition = {
   envPrefix: string;
   // Endpoint /chat/completions complet, compatible OpenAI.
   baseUrl: string;
+  headers?: (env: NodeJS.ProcessEnv) => Record<string, string>;
 };
 
-// Ordre = priorité de repli. Tout fournisseur sans clé ET modèle est ignoré.
-// Aujourd'hui : Google AI uniquement (modèle Groq retiré, clé OpenRouter
-// invalide et crédits OpenAI épuisés au moment du diagnostic).
-// Pour en ajouter un : une entrée ci-dessous + les variables
-// <PREFIXE>_API_KEY / <PREFIXE>_MODEL (/ <PREFIXE>_BASE_URL si besoin).
+// Ordre = priorité de repli. Les modèles séparés par des virgules sont tentés
+// dans l'ordre fourni avant de passer au fournisseur suivant.
 const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
   {
     name: "google",
@@ -68,15 +67,41 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     baseUrl:
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
   },
+  {
+    name: "groq",
+    envPrefix: "GROQ",
+    baseUrl: "https://api.groq.com/openai/v1/chat/completions",
+  },
+  {
+    name: "openrouter",
+    envPrefix: "OPENROUTER",
+    baseUrl: "https://openrouter.ai/api/v1/chat/completions",
+    headers: (env) => ({
+      ...(env.NEXTAUTH_URL ? { "HTTP-Referer": env.NEXTAUTH_URL } : {}),
+      "X-Title": "Prompt Forge",
+    }),
+  },
 ];
 
 export function getAvailableProviders(): AIProvider[] {
-  return PROVIDER_DEFINITIONS.map((p) => ({
-    name: p.name,
-    baseUrl: process.env[`${p.envPrefix}_BASE_URL`] ?? p.baseUrl,
-    apiKey: process.env[`${p.envPrefix}_API_KEY`] ?? "",
-    model: process.env[`${p.envPrefix}_MODEL`] ?? "",
-  })).filter((p) => p.apiKey && p.model);
+  return PROVIDER_DEFINITIONS.flatMap((definition) => {
+    const apiKey = process.env[`${definition.envPrefix}_API_KEY`] ?? "";
+    const models = (process.env[`${definition.envPrefix}_MODEL`] ?? "")
+      .split(",")
+      .map((model) => model.trim())
+      .filter(Boolean);
+
+    if (!apiKey || models.length === 0) return [];
+
+    return models.map((model) => ({
+      name: definition.name,
+      baseUrl:
+        process.env[`${definition.envPrefix}_BASE_URL`] ?? definition.baseUrl,
+      apiKey,
+      model,
+      headers: definition.headers?.(process.env),
+    }));
+  });
 }
 
 // Un appel fournisseur, avec réessais espacés sur erreur transitoire.
@@ -105,8 +130,7 @@ async function callProvider(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${provider.apiKey}`,
-          // Un fournisseur exigeant des en-têtes en plus s'ajoute ici
-          // (ex. OpenRouter : HTTP-Referer / X-Title).
+          ...provider.headers,
         },
         body: JSON.stringify({
           model: provider.model,
@@ -117,14 +141,17 @@ async function callProvider(
       });
 
       if (!res.ok) {
-        const isQuota = res.status === 429 || res.status === 402;
         const transient = TRANSIENT_STATUSES.has(res.status);
-        const reason = isQuota
-          ? "quota/rate-limit"
-          : `HTTP ${res.status}${transient ? ", transitoire" : ""}`;
         console.error(
-          `[ai] ${provider.name} a échoué (${reason}) : ${(await res.text()).slice(0, 500)}`
+          `[ai] ${provider.name}/${provider.model} a échoué (HTTP ${res.status}${transient ? ", transitoire" : ""})`
         );
+        try {
+          await res.body?.cancel();
+        } catch {
+          console.error(
+            `[ai] ${provider.name}/${provider.model} : fermeture impossible de la réponse HTTP ${res.status}`
+          );
+        }
         if (transient && attempt < MAX_ATTEMPTS) {
           await sleep(RETRY_DELAYS_MS[attempt - 1]);
           continue;
@@ -147,8 +174,10 @@ async function callProvider(
       }
 
       return { ok: true, content };
-    } catch (error) {
-      console.error(`[ai] ${provider.name} a échoué :`, error);
+    } catch {
+      console.error(
+        `[ai] ${provider.name}/${provider.model} a échoué (réseau/timeout)`
+      );
       if (attempt < MAX_ATTEMPTS) {
         await sleep(RETRY_DELAYS_MS[attempt - 1]);
         continue;
@@ -175,13 +204,13 @@ export async function callAI(
 
   if (providers.length === 0) {
     throw new Error(
-      "Aucun fournisseur IA configuré. Renseigne GOOGLE_AI_API_KEY et " +
-        "GOOGLE_AI_MODEL (fichier .env en local, variables d'environnement en production)."
+      "Aucun fournisseur IA configuré. Renseigne au moins une paire de variables " +
+        "API_KEY et MODEL pour Google AI, Groq ou OpenRouter."
     );
   }
 
   const deadline = Date.now() + TOTAL_TIMEOUT_MS;
-  let lastError: string = "inconnue";
+  const failures: string[] = [];
   let lastStatus: number | null = null;
 
   for (const provider of providers) {
@@ -202,7 +231,9 @@ export async function callAI(
       };
     }
     lastStatus = outcome.status;
-    lastError = `${provider.name} (${outcome.status ?? "échec réseau"})`;
+    failures.push(
+      `${provider.name}/${provider.model} (${outcome.status ?? "réseau/timeout"})`
+    );
   }
 
   // Surcharge temporaire : on le dit clairement (au lieu d'accuser à tort la clé
@@ -216,13 +247,14 @@ export async function callAI(
   }
 
   const timedOut = Date.now() >= deadline;
+  const providerNames = Array.from(
+    new Set(providers.map((provider) => provider.name))
+  );
   throw new AIUnavailableError(
-    `Tous les fournisseurs IA sont indisponibles (${providers
-      .map((p) => p.name)
-      .join(", ")}). ` +
+    `Tous les fournisseurs IA sont indisponibles (${providerNames.join(", ")}). ` +
       (timedOut
         ? `Le délai global (${TOTAL_TIMEOUT_MS} ms) est épuisé.`
-        : `Dernier échec : ${lastError}. Vérifie la clé API, le nom du modèle et les quotas.`),
+        : `Échecs : ${failures.join(", ")}. Vérifie la configuration du fournisseur et les quotas.`),
     502
   );
 }

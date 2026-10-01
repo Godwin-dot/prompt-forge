@@ -2,11 +2,11 @@
 
 Générateur de prompts IA : décrivez ce dont vous avez besoin, répondez à quelques
 questions de clarification, et obtenez un prompt optimisé prêt à coller dans
-votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automatique (actif aujourd'hui : Google AI / Gemini).
+votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automatique entre Google AI, Groq et OpenRouter.
 
 ## Fonctionnalités
 - Parcours en 3 étapes : idée → précisions → prompt final.
-- Repli automatique entre fournisseurs IA (`PROVIDER_DEFINITIONS` dans `lib/ai.ts`) ; Google AI (Gemini) est activé par défaut.
+- Repli automatique entre Google AI, Groq et OpenRouter (`PROVIDER_DEFINITIONS` dans `lib/ai.ts`), dans cet ordre ; plusieurs modèles peuvent être fournis, séparés par des virgules.
 - Comptes utilisateurs : historique privé, copie et suppression.
 - Suggestions de démarrage, recherche/filtres dans l'historique.
 - Marquer un prompt comme « utilisé », « régénérer », partager un lien public.
@@ -35,7 +35,7 @@ votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automati
    cp .env.example .env
    ```
    - `DATABASE_URL="file:./dev.db"` (SQLite local) ;
-   - une clé IA : `GOOGLE_AI_API_KEY` (AI Studio) et `GOOGLE_AI_MODEL` ;
+   - au moins un fournisseur IA : une clé (`GOOGLE_AI_API_KEY`, `GROQ_API_KEY` ou `OPENROUTER_API_KEY`) et son modèle (`*_MODEL`) ;
    - `NEXTAUTH_SECRET` (générer avec `openssl rand -base64 32`).
 
 3. Synchroniser la base locale :
@@ -65,7 +65,7 @@ votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automati
    - `TURSO_AUTH_TOKEN` = votre jeton
    - `NEXTAUTH_SECRET` = une chaîne aléatoire longue
    - `NEXTAUTH_URL` = l'URL de votre déploiement
-   - vos clés IA (`GOOGLE_AI_API_KEY`, `GOOGLE_AI_MODEL`)
+   - les clés et modèles du ou des fournisseurs IA choisis (`GOOGLE_AI_*`, `GROQ_*`, `OPENROUTER_*`)
 3. Appliquez le schéma à la base Turso (`prisma/turso-migrate.sql` ou équivalent) :
    ```bash
    DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." npx prisma db push
@@ -84,18 +84,17 @@ votre outil d'IA préféré. Architecture multi-fournisseurs avec repli automati
 - Mots de passe hachés (bcrypt), isolation de l'historique par utilisateur.
 
 ## Confidentialité
-Vos idées/réponses sont envoyées à Google AI (Gemini) pour générer le
-prompt. Voir la page `/privacy` in-app. Un consentement est demandé au premier
-usage.
+Vos idées/réponses sont envoyées au premier fournisseur IA configuré qui répond
+(Google AI, Groq ou OpenRouter) pour générer le prompt. Consultez la page
+`/privacy` in-app et les politiques du fournisseur utilisé. Un consentement est
+demandé au premier usage.
 
 ## Dépannage
 - `GET /api/health` : liste les fournisseurs IA réellement configurés (aucune clé
   exposée, aucun appel facturé). Réflexe n°1 quand `/api/generate` renvoie une erreur,
   surtout en production où les logs sont moins accessibles.
-- « Aucun fournisseur IA configuré » : `GOOGLE_AI_API_KEY` ou `GOOGLE_AI_MODEL` manquante.
-- « Tous les fournisseurs IA sont indisponibles » : clé invalide, modèle retiré par le
-  fournisseur (vérifier la liste des modèles disponibles) ou quota épuisé. Le détail de
-  chaque échec est logué côté serveur : `[ai] <fournisseur> a échoué (… )`.
+- « Aucun fournisseur IA configuré » : aucune paire clé/modèle n'est renseignée pour Google AI, Groq ou OpenRouter.
+- « Tous les fournisseurs IA sont indisponibles » : consulter les logs serveur `[ai]`; ils indiquent le fournisseur, le modèle et le statut HTTP, sans contenu de réponse fournisseur. 401/403 indique un problème d'accès à la clé, 400/404 une configuration/requête/modèle à vérifier, 402/429 le quota ou la limite de débit; les 5xx sont généralement temporaires.
 - Les messages d'erreur de l'API sont affichés tels quels dans l'interface.
 
 ## Roadmap (backlog)
