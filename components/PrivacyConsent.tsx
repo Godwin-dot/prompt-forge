@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const STORAGE_KEY = "pf_privacy_consent";
+const STORAGE_KEY = "pf_privacy_consent_zai";
 
 function readConsent(): boolean {
   if (typeof window === "undefined") return false;
@@ -96,8 +96,8 @@ export default function PrivacyConsent() {
           Confidentialité
         </h2>
         <p className="mt-3 text-sm leading-[1.6] text-[var(--color-text-muted)]">
-          Ton idée et tes réponses sont envoyées à un fournisseur d&apos;IA externe
-          (Google AI / Gemini) pour générer ton prompt. Elles
+          Ton idée et tes réponses sont envoyées à Z.ai, notre fournisseur
+          d&apos;IA externe, pour générer ton prompt. Elles
           ne sont pas utilisées pour t&apos;identifier ; évite d&apos;y inscrire des
           données personnelles sensibles. Chaque prompt final est enregistré
           dans ton historique privé.
