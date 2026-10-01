@@ -35,6 +35,7 @@ describe("callAI — Z.ai", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     for (const key of PROVIDER_ENV) {
@@ -62,6 +63,7 @@ describe("callAI — Z.ai", () => {
     );
     expect(JSON.parse(String(init.body))).toMatchObject({
       model: "glm-4.7-flash",
+      thinking: { type: "disabled" },
       response_format: { type: "json_object" },
     });
     expect(result.provider).toBe("Z.ai");
@@ -86,6 +88,31 @@ describe("callAI — Z.ai", () => {
 
     expect(result.content).toBe("OK-APRES-RETRY");
     expect(calls).toBe(2);
+  });
+
+  it("conserve les échecs observés dans le message de délai dépassé", async () => {
+    process.env.ZAI_MODEL = "glm-4.7-flash, glm-4.5-flash";
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<never>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
+              { once: true }
+            );
+          })
+      )
+    );
+
+    const request = callAI([{ role: "user", content: "test" }]);
+    const rejection = expect(request).rejects.toMatchObject({
+      message: expect.stringMatching(/Échecs observés : .*timeout.*timeout/),
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
   });
 
   it("essaie le modèle Z.ai suivant si le modèle configuré échoue", async () => {
