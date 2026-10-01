@@ -48,15 +48,20 @@ export class AIUnavailableError extends Error {
 }
 
 const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/chat/completions";
+const FREE_ZAI_MODELS = ["glm-4.7-flash", "glm-4.5-flash"] as const;
+const FREE_ZAI_MODEL_SET = new Set<string>(FREE_ZAI_MODELS);
+const DEFAULT_ZAI_MODEL = FREE_ZAI_MODELS[0];
 
 export function getAvailableProviders(): AIProvider[] {
-  // OPENAI_* remains a migration alias for existing .env files; requests still
-  // go exclusively to Z.ai. Configure ZAI_* for new deployments.
-  const apiKey = process.env.ZAI_API_KEY || process.env.OPENAI_API_KEY || "";
-  const models = (process.env.ZAI_MODEL || process.env.OPENAI_MODEL || "")
+  const apiKey = process.env.ZAI_API_KEY ?? "";
+  const configuredModels = (process.env.ZAI_MODEL ?? "")
     .split(",")
     .map((model) => model.trim())
     .filter(Boolean);
+  const models = (configuredModels.length > 0
+    ? configuredModels
+    : [DEFAULT_ZAI_MODEL]
+  ).filter((model) => FREE_ZAI_MODEL_SET.has(model));
 
   if (!apiKey || models.length === 0) return [];
 
@@ -169,7 +174,7 @@ export async function callAI(
 
   if (providers.length === 0) {
     throw new Error(
-      "Z.ai n'est pas configuré. Renseigne ZAI_API_KEY et ZAI_MODEL."
+      `Z.ai n'est pas configuré. Renseigne ZAI_API_KEY et choisis un modèle gratuit : ${FREE_ZAI_MODELS.join(" ou ")}.`
     );
   }
 

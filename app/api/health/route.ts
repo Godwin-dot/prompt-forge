@@ -21,7 +21,7 @@ export async function GET() {
       hint:
         providers.length > 0
           ? "Z.ai est configuré. Si /api/generate échoue, vérifie le statut HTTP dans les logs serveur ([ai] ...)."
-          : "Z.ai n'est pas configuré : renseigne ZAI_API_KEY et ZAI_MODEL (.env en local, variables d'environnement en production).",
+          : "Z.ai n'est pas configuré : renseigne ZAI_API_KEY (.env en local, variables d'environnement en production). ZAI_MODEL accepte glm-4.7-flash et glm-4.5-flash.",
     },
     { status: providers.length > 0 ? 200 : 503 }
   );

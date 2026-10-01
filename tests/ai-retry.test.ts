@@ -30,7 +30,7 @@ describe("callAI — Z.ai", () => {
     );
     for (const key of PROVIDER_ENV) delete process.env[key];
     process.env.ZAI_API_KEY = "cle-de-test";
-    process.env.ZAI_MODEL = "glm-5.3";
+    process.env.ZAI_MODEL = "glm-4.7-flash";
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
@@ -60,7 +60,7 @@ describe("callAI — Z.ai", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe(
       "Bearer cle-de-test"
     );
-    expect(JSON.parse(String(init.body))).toMatchObject({ model: "glm-5.3" });
+    expect(JSON.parse(String(init.body))).toMatchObject({ model: "glm-4.7-flash" });
     expect(result.provider).toBe("Z.ai");
   });
 
@@ -86,15 +86,15 @@ describe("callAI — Z.ai", () => {
   });
 
   it("essaie le modèle Z.ai suivant si le modèle configuré échoue", async () => {
-    process.env.ZAI_MODEL = "glm-indisponible, glm-5.3";
+    process.env.ZAI_MODEL = "glm-4.7-flash, glm-4.5-flash";
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         const { model } = JSON.parse(String(init?.body)) as { model: string };
-        if (model === "glm-indisponible") {
+        if (model === "glm-4.7-flash") {
           return jsonResponse({ error: { message: "model not found" } }, 404);
         }
         return jsonResponse({
-          choices: [{ message: { content: "OK-GLM-5.3" } }],
+          choices: [{ message: { content: "OK-GLM-4.5-FLASH" } }],
         });
       }
     );
@@ -104,8 +104,8 @@ describe("callAI — Z.ai", () => {
 
     expect(result).toMatchObject({
       provider: "Z.ai",
-      model: "glm-5.3",
-      content: "OK-GLM-5.3",
+      model: "glm-4.5-flash",
+      content: "OK-GLM-4.5-FLASH",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -134,6 +134,27 @@ describe("callAI — Z.ai", () => {
     );
   });
 
+  it("ignore l'ancien modèle OpenAI gpt-4o-mini et utilise uniquement GLM gratuit", async () => {
+    process.env.OPENAI_API_KEY = "cle-openai-test";
+    process.env.OPENAI_MODEL = "gpt-4o-mini";
+    delete process.env.ZAI_MODEL;
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) =>
+        jsonResponse({
+          choices: [{ message: { content: "OK-GLM" } }],
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await callAI([{ role: "user", content: "test" }]);
+    const [, init] = fetchMock.mock.calls[0] as [URL | string, RequestInit];
+
+    expect(result.model).toBe("glm-4.7-flash");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      model: "glm-4.7-flash",
+    });
+  });
+
   it("signale une erreur réseau sans révéler le détail ni réessayer sur d'autres fournisseurs", async () => {
     const sensitiveErrorText = "private-fetch-error-detail";
     const fetchMock = vi
@@ -147,7 +168,7 @@ describe("callAI — Z.ai", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(console.error).toHaveBeenCalledWith(
-      "[ai] Z.ai/glm-5.3 a échoué (network)"
+      "[ai] Z.ai/glm-4.7-flash a échoué (network)"
     );
     expect(
       vi.mocked(console.error).mock.calls.flat().join(" ")
@@ -166,7 +187,7 @@ describe("callAI — Z.ai", () => {
     ).rejects.toThrow(/Z\.ai est indisponible/);
 
     expect(console.error).toHaveBeenCalledWith(
-      "[ai] Z.ai/glm-5.3 a échoué (HTTP 401)"
+      "[ai] Z.ai/glm-4.7-flash a échoué (HTTP 401)"
     );
     expect(
       vi.mocked(console.error).mock.calls.flat().join(" ")
