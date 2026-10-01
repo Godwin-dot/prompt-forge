@@ -63,21 +63,60 @@ export function buildUserMessage(
 }
 
 export function parseAIResult(raw: string): AIResult | null {
-  try {
-    const parsed = JSON.parse(raw) as AIResult;
+  const candidates = [raw.trim()];
+  const objectStart = raw.indexOf("{");
+  if (objectStart >= 0) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
 
-    if (parsed.type === "questions" && Array.isArray(parsed.questions)) {
-      return { type: "questions", questions: parsed.questions };
+    for (let index = objectStart; index < raw.length; index++) {
+      const char = raw[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+
+      if (char === '"') inString = true;
+      else if (char === "{") depth++;
+      else if (char === "}" && --depth === 0) {
+        candidates.push(raw.slice(objectStart, index + 1));
+        break;
+      }
     }
-
-    if (parsed.type === "final" && typeof parsed.prompt === "string") {
-      return { type: "final", prompt: parsed.prompt };
-    }
-
-    return null;
-  } catch {
-    return null;
   }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed: unknown = JSON.parse(candidate);
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        continue;
+      }
+      const result = parsed as Record<string, unknown>;
+
+      if (
+        result.type === "questions" &&
+        Array.isArray(result.questions) &&
+        result.questions.every((question) => typeof question === "string")
+      ) {
+        return { type: "questions", questions: result.questions };
+      }
+
+      if (result.type === "final" && typeof result.prompt === "string") {
+        return { type: "final", prompt: result.prompt };
+      }
+    } catch {
+      // Try the extracted object when the model wraps JSON in formatting.
+    }
+  }
+
+  return null;
 }
 
 export function buildLocalFinalPrompt(

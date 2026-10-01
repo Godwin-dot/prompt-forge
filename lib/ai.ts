@@ -104,6 +104,8 @@ async function callProvider(
           model: provider.model,
           messages,
           temperature,
+          thinking: { type: "disabled" },
+          response_format: { type: "json_object" },
         }),
         signal: controller.signal,
       });
@@ -224,7 +226,8 @@ export async function callAI(
   throw new AIUnavailableError(
     `Z.ai est indisponible (${providerNames.join(", ")}). ` +
       (timedOut
-        ? `Le délai global (${TOTAL_TIMEOUT_MS} ms) est épuisé.`
+        ? `Le délai global (${TOTAL_TIMEOUT_MS} ms) est épuisé. ` +
+          `Échecs observés : ${failures.join(", ")}.`
         : `Échecs : ${failures.join(", ")}. Vérifie la configuration du fournisseur et les quotas.`),
     502
   );

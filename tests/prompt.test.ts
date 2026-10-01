@@ -22,6 +22,20 @@ describe("parseAIResult", () => {
     });
   });
 
+  it("parse un JSON encadré de Markdown", () => {
+    expect(
+      parseAIResult('```json\n{"type":"final","prompt":"Fais X"}\n```')
+    ).toEqual({ type: "final", prompt: "Fais X" });
+  });
+
+  it("extrait le JSON malgré du texte périphérique et des accolades dans une chaîne", () => {
+    expect(
+      parseAIResult(
+        'Voici le résultat : {"type":"final","prompt":"Garde {ce texte}"} Terminé.'
+      )
+    ).toEqual({ type: "final", prompt: "Garde {ce texte}" });
+  });
+
   it("retourne null sur JSON invalide", () => {
     expect(parseAIResult("pas du json")).toBeNull();
   });
