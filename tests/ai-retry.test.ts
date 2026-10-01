@@ -144,6 +144,32 @@ describe("callAI — réessai sur erreur transitoire", () => {
     );
   });
 
+  it("passe au fournisseur suivant après une erreur réseau sans répéter le même appel", async () => {
+    process.env.GROQ_API_KEY = "cle-groq-test";
+    process.env.GROQ_MODEL = "llama-3.3-70b";
+    const sensitiveErrorText = "private-fetch-error-detail";
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError(sensitiveErrorText))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          choices: [{ message: { content: "OK-GROQ" } }],
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await callAI([{ role: "user", content: "test" }]);
+
+    expect(result.provider).toBe("groq");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(console.error).toHaveBeenCalledWith(
+      "[ai] google/gemini-3.8-flash a échoué (network)"
+    );
+    expect(
+      vi.mocked(console.error).mock.calls.flat().join(" ")
+    ).not.toContain(sensitiveErrorText);
+  });
+
   it("envoie les en-têtes d'identification à OpenRouter", async () => {
     delete process.env.GOOGLE_AI_API_KEY;
     delete process.env.GOOGLE_AI_MODEL;

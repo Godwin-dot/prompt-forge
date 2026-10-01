@@ -20,7 +20,11 @@ export type AIResponse = {
 // Résultat d'une tentative : contenu, ou échec (status HTTP, null si réseau).
 type ProviderOutcome =
   | { ok: true; content: string }
-  | { ok: false; status: number | null };
+  | {
+      ok: false;
+      status: number | null;
+      reason?: "timeout" | "network" | "response";
+    };
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const TOTAL_TIMEOUT_MS = 30_000;
@@ -174,15 +178,17 @@ async function callProvider(
       }
 
       return { ok: true, content };
-    } catch {
+    } catch (error) {
+      const reason =
+        error instanceof Error && error.name === "AbortError"
+          ? "timeout"
+          : error instanceof TypeError
+            ? "network"
+            : "response";
       console.error(
-        `[ai] ${provider.name}/${provider.model} a échoué (réseau/timeout)`
+        `[ai] ${provider.name}/${provider.model} a échoué (${reason})`
       );
-      if (attempt < MAX_ATTEMPTS) {
-        await sleep(RETRY_DELAYS_MS[attempt - 1]);
-        continue;
-      }
-      return { ok: false, status: null };
+      return { ok: false, status: null, reason };
     } finally {
       clearTimeout(timeout);
     }
@@ -213,14 +219,16 @@ export async function callAI(
   const failures: string[] = [];
   let lastStatus: number | null = null;
 
-  for (const provider of providers) {
+  for (let index = 0; index < providers.length; index++) {
+    const provider = providers[index];
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
 
+    const providerBudget = Math.ceil(remaining / (providers.length - index));
     const outcome = await callProvider(
       provider,
       messages,
-      remaining,
+      providerBudget,
       options?.temperature
     );
     if (outcome.ok) {
@@ -232,7 +240,7 @@ export async function callAI(
     }
     lastStatus = outcome.status;
     failures.push(
-      `${provider.name}/${provider.model} (${outcome.status ?? "réseau/timeout"})`
+      `${provider.name}/${provider.model} (${outcome.status ?? outcome.reason ?? "erreur inconnue"})`
     );
   }
 
