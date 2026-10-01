@@ -60,7 +60,10 @@ describe("callAI — Z.ai", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe(
       "Bearer cle-de-test"
     );
-    expect(JSON.parse(String(init.body))).toMatchObject({ model: "glm-4.7-flash" });
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      model: "glm-4.7-flash",
+      response_format: { type: "json_object" },
+    });
     expect(result.provider).toBe("Z.ai");
   });
 

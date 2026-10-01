@@ -104,6 +104,7 @@ async function callProvider(
           model: provider.model,
           messages,
           temperature,
+          response_format: { type: "json_object" },
         }),
         signal: controller.signal,
       });
