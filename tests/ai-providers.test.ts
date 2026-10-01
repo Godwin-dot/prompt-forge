@@ -32,53 +32,37 @@ describe("getAvailableProviders", () => {
   beforeEach(clearWatched);
   afterEach(restoreWatched);
 
-  it("ne configure rien sans clé Z.ai et modèle", () => {
+  it("ne configure rien sans clé Z.ai", () => {
     expect(getAvailableProviders()).toEqual([]);
   });
 
-  it("utilise ZAI_API_KEY / ZAI_MODEL et l'endpoint officiel Z.ai", () => {
+  it("utilise ZAI_API_KEY et le modèle gratuit par défaut", () => {
     process.env.ZAI_API_KEY = "cle-de-test";
-    process.env.ZAI_MODEL = "glm-5.3";
 
     expect(getAvailableProviders()).toEqual([
       {
         name: "Z.ai",
         baseUrl: "https://api.z.ai/api/paas/v4/chat/completions",
         apiKey: "cle-de-test",
-        model: "glm-5.3",
+        model: "glm-4.7-flash",
       },
     ]);
   });
 
-  it("préfère les variables ZAI_* aux alias de migration OPENAI_*", () => {
+  it("utilise uniquement les modèles GLM gratuits configurés", () => {
     process.env.ZAI_API_KEY = "cle-zai-test";
-    process.env.ZAI_MODEL = "glm-5.3";
-    process.env.OPENAI_API_KEY = "ancienne-cle-test";
-    process.env.OPENAI_MODEL = "ancien-modele-test";
+    process.env.ZAI_MODEL = "gpt-4o-mini, glm-4.7-flash, glm-5.3, glm-4.5-flash";
 
-    expect(getAvailableProviders().map((provider) => ({
-      name: provider.name,
-      model: provider.model,
-      baseUrl: provider.baseUrl,
-    }))).toEqual([
-      {
-        name: "Z.ai",
-        model: "glm-5.3",
-        baseUrl: "https://api.z.ai/api/paas/v4/chat/completions",
-      },
+    expect(getAvailableProviders().map(({ model }) => model)).toEqual([
+      "glm-4.7-flash",
+      "glm-4.5-flash",
     ]);
   });
 
-  it("accepte les noms OPENAI_* existants mais envoie toujours vers Z.ai", () => {
+  it("ignore les anciennes variables OPENAI_*", () => {
     process.env.OPENAI_API_KEY = "cle-de-test";
-    process.env.OPENAI_MODEL = "glm-5.3";
-
-    const [provider] = getAvailableProviders();
-
-    expect(provider.name).toBe("Z.ai");
-    expect(provider.baseUrl).toBe(
-      "https://api.z.ai/api/paas/v4/chat/completions"
-    );
+    process.env.OPENAI_MODEL = "glm-4.7-flash";
+    expect(getAvailableProviders()).toEqual([]);
   });
 
   it("ignore les anciennes clés Google, Groq et OpenRouter", () => {
@@ -92,8 +76,9 @@ describe("getAvailableProviders", () => {
     expect(getAvailableProviders()).toEqual([]);
   });
 
-  it("ignore une configuration Z.ai incomplète", () => {
+  it("ignore un modèle configuré qui n'est pas un modèle gratuit GLM", () => {
     process.env.ZAI_API_KEY = "cle-de-test";
+    process.env.ZAI_MODEL = "gpt-4o-mini";
     expect(getAvailableProviders()).toEqual([]);
   });
 });
